@@ -17,7 +17,6 @@ import java.util.Base64
 
 fun Route.authRoutes() {
     route("/api/auth") {
-
         post("/register") {
             val request = call.receive<RegisterRequest>()
 

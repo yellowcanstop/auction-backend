@@ -28,6 +28,10 @@ object Groups : IntIdTable("groups") {
     val taskPointsAverage = integer("task_points_average").nullable()
     val taskPointsMax = integer("task_points_max").nullable()
     val status = enumeration("status", Status::class ).default(Status.ACTIVE)
+
+    init {
+        index(false, inviteCode, id, status) // speed up invite code lookups
+    }
 }
 
 object Memberships : IntIdTable("memberships") {
@@ -43,7 +47,6 @@ object Memberships : IntIdTable("memberships") {
 }
 
 object Tasks : IntIdTable("tasks") {
-    val groupId = reference("group_id", Groups)
     val taskName = varchar("task_name", 255)
     val description = text("description")
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
@@ -63,7 +66,6 @@ object Claims : IntIdTable("claims") {
 }
 
 object Submissions : IntIdTable("submissions") {
-    val taskId = reference("task_id", Tasks)
     val claimId = reference("claim_id", Claims)
     val authorId = reference("author_id", Memberships)
     val coAuthorId = reference("co_author_id", Memberships).nullable()
@@ -73,7 +75,6 @@ object Submissions : IntIdTable("submissions") {
 }
 
 object Reviews : IntIdTable("reviews") {
-    val taskId = reference("task_id", Tasks)
     val submissionId = reference("submission_id", Submissions)
     val reviewerId = reference("reviewer_id", Users)
     val reviewedAt = datetime("reviewed_at").clientDefault { LocalDateTime.now() }
@@ -81,7 +82,6 @@ object Reviews : IntIdTable("reviews") {
 }
 
 object Auctions : IntIdTable("auctions") {
-    val groupId = reference("group_id", Groups)
     val rewardName = varchar("reward_name", 255)
     val description = text("description")
     val rewardImage = varchar("reward_image", 255)

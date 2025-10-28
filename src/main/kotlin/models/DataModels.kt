@@ -3,6 +3,13 @@ package com.example.models
 import kotlinx.serialization.Serializable
 
 // Define JSON structure for API requests/responses
+// AUTH
+@Serializable
+data class UserData(
+    val id: Int,
+    val email: String,
+    val username: String
+)
 
 @Serializable
 data class RegisterRequest(
@@ -23,10 +30,178 @@ data class LoginResponse(
     val user: UserData // so a separate API call is not needed
 )
 
+// GROUPS
 @Serializable
-data class UserData(
-    val id: Int,
-    val email: String,
-    val username: String
+data class MemberData(
+    val userId: Int,
+    val points: Int
 )
+
+@Serializable
+data class CreateGroupRequest(
+    val groupName: String,
+    val description: String
+)
+
+@Serializable
+data class CreateGroupResponse(
+    val groupId: Int,
+    val groupName: String,
+    val description: String,
+    val inviteCode: String,
+    val creatorId: Int
+)
+
+@Serializable
+data class EditGroupRequest(
+    val groupId: Int,
+    val autoApprove: Boolean,
+    val taskPointsMin: Int,
+    val taskPointsAverage: Int,
+    val taskPointsMax: Int,
+    val status: Status
+)
+
+@Serializable
+data class EditGroupResponse(
+    val groupId: Int,
+    val autoApprove: Boolean,
+    val taskPointsMin: Int?,
+    val taskPointsAverage: Int?,
+    val taskPointsMax: Int?,
+    val status: Status
+)
+
+@Serializable
+data class ViewMembersRequest(
+    val groupId: Int
+)
+
+@Serializable
+data class ViewMembersResponse(
+    val members: List<MemberData>
+)
+
+@Serializable
+data class JoinGroupRequest(
+    val userId: Int,
+    val inviteCode: String
+)
+
+@Serializable
+data class JoinGroupResponse(
+    val groupId: Int,
+    val groupName: String,
+    val description: String,
+    val creatorId: Int
+)
+
+// TASKS
+@Serializable
+data class TaskData(
+    val taskId: Int,
+    val taskName: String,
+    val description: String,
+    val dueDate: String?, // ISO 8601 for locale independence
+    val points: Int,
+    val quantity: Int,
+    val requireProof: Boolean
+)
+
+@Serializable
+data class ViewTaskRequest(
+    val groupId: Int
+)
+
+@Serializable
+data class ViewTaskResponse(
+    val tasks: List<TaskData>
+)
+
+@Serializable
+data class CreateTaskRequest(
+    val groupId: Int,
+    val taskName: String,
+    val description: String,
+    val dueDate: String?,
+    val points: Int,
+    val quantity: Int,
+    val requireProof: Boolean
+)
+
+@Serializable
+data class CreateTaskResponse(
+    val task: TaskData
+)
+
+@Serializable
+data class RemoveTaskRequest(
+    val taskId: Int
+)
+
+@Serializable
+data class ClaimTaskRequest(
+    val taskId: Int,
+    val claimantId: Int
+)
+
+@Serializable
+data class UnclaimTaskRequest(
+    val claimId: Int
+)
+
+@Serializable
+data class CreateSubmissionRequest(
+    val taskId: Int,
+    val claimId: Int,
+    val authorId: Int,
+    val coAuthorId: Int?,
+    val textContent: String?,
+    val imageContent: String?
+)
+
+@Serializable
+data class ViewClaimsRequest(
+    val taskId: Int
+)
+
+@Serializable
+data class ClaimData(
+    val claimantName: String,
+    // if submissionId and reviewDecision are null, "In Progress"
+    val submissionId: Int?, // for subsequent ViewSubmissionRequest
+    val reviewDecision: Decision?,
+    val reviewTime: String? // ISO 8601 for locale independence
+)
+
+@Serializable
+data class ViewClaimsResponse(
+    val claims: List<ClaimData>
+)
+
+@Serializable
+data class ViewSubmissionRequest(
+    val submissionId: Int
+)
+
+@Serializable
+data class ViewSubmissionResponse(
+    val submissionId: Int,
+    val authorName: String,
+    val coAuthorName: String?,
+    val submittedAt: String, // ISO 8601 for locale independence
+    val textContent: String?,
+    val imageContent: String?
+)
+
+@Serializable
+data class ReviewSubmissionRequest(
+    val submissionId: Int,
+    val reviewerId: Int,
+    val decision: Decision
+)
+
+// AUCTIONS
+
+
 
