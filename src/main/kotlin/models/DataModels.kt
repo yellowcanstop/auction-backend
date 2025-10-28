@@ -120,7 +120,7 @@ data class ViewTaskResponse(
 
 @Serializable
 data class CreateTaskRequest(
-    val groupId: Int,
+    val creatorId: Int,
     val taskName: String,
     val description: String,
     val dueDate: String?,
@@ -187,7 +187,9 @@ data class ViewSubmissionRequest(
 @Serializable
 data class ViewSubmissionResponse(
     val submissionId: Int,
+    val authorId: Int,
     val authorName: String,
+    val coAuthorId: Int?,
     val coAuthorName: String?,
     val submittedAt: String, // ISO 8601 for locale independence
     val textContent: String?,
@@ -195,13 +197,79 @@ data class ViewSubmissionResponse(
 )
 
 @Serializable
-data class ReviewSubmissionRequest(
+data class GradeSubmissionRequest(
     val submissionId: Int,
     val reviewerId: Int,
     val decision: Decision
 )
 
 // AUCTIONS
+@Serializable
+data class AuctionData(
+    val auctionId: Int,
+    val rewardName: String,
+    val description: String,
+    val rewardImage: String,
+    val startTime: String,
+    val endTime: String,
+    val minimumBid: Int,
+    val bidIncrement: Int
+)
 
+@Serializable
+data class CreateAuctionRequest(
+    val creatorId: Int,
+    val rewardName: String,
+    val description: String,
+    val rewardImage: String,
+    val startTime: String,
+    val endTime: String,
+    val minimumBid: Int,
+    val bidIncrement: Int
+)
 
+@Serializable
+data class CreateAuctionResponse(
+    val auction: AuctionData
+)
 
+@Serializable
+data class ViewAuctionsRequest(
+    val groupId: Int
+)
+
+@Serializable
+data class ViewAuctionsResponse(
+    val auctions: List<AuctionData>
+)
+
+@Serializable
+data class ViewBidsRequest(
+    val auctionId: Int
+)
+
+@Serializable
+data class ViewBidsResponse(
+    val bids: List<BidData>
+)
+
+@Serializable
+data class BidData(
+    val auctionId: Int,
+    val bidderId: Int,
+    val bidderName: String,
+    val bidAmount: Int,
+    val bidAt: String
+)
+
+@Serializable
+data class BidRequest(
+    val auctionId: Int,
+    val bidderId: Int,
+    val bidAmount: Int
+)
+
+@Serializable
+data class BidResponse(
+    val bids: List<BidData>
+)

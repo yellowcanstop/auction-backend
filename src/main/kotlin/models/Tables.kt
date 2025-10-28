@@ -47,6 +47,8 @@ object Memberships : IntIdTable("memberships") {
 }
 
 object Tasks : IntIdTable("tasks") {
+    val groupId = reference("group_id", Groups)
+    val creatorId = reference("creator_id", Users)
     val taskName = varchar("task_name", 255)
     val description = text("description")
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
@@ -82,13 +84,15 @@ object Reviews : IntIdTable("reviews") {
 }
 
 object Auctions : IntIdTable("auctions") {
+    val groupId = reference("group_id", Groups)
+    val creatorId = reference("creator_id", Users)
     val rewardName = varchar("reward_name", 255)
     val description = text("description")
     val rewardImage = varchar("reward_image", 255)
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
     val startTime = datetime("start_time")
     val endTime = datetime( "end_time")
-    val startingBid = integer("starting_bid").default(0)
+    val minimumBid = integer("minimum_bid").default(0)
     val bidIncrement = integer("bid_increment").default(1)
     val status = enumeration("status", Status::class ).default(Status.ACTIVE)
 }
@@ -96,11 +100,11 @@ object Auctions : IntIdTable("auctions") {
 object Bids : IntIdTable("bids") {
     val auctionId = reference("auction_id", Auctions)
     val bidderId = reference("bidder_id", Memberships)
-    val amount = integer("amount")
+    val bidAmount = integer("bid_amount")
     val bidAt = datetime("bid_at").clientDefault { LocalDateTime.now() }
 
     init {
-        index(false, auctionId, amount) // speed up highest bid lookup
+        index(false, auctionId, bidAmount) // speed up highest bid lookup
         index(false, bidderId, bidAt) // speed up user bid history lookup
     }
 }
