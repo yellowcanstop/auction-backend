@@ -26,8 +26,8 @@ fun Application.configureSecurity() {
     }
 }
 
-// TODO check if necessary
 // Extension function to get current user ID from token
+// UserId was originally encoded during token generation
 fun ApplicationCall.userId(): Int {
     val principal = principal<JWTPrincipal>()
     val token = request.headers["Authorization"]?.removePrefix("Bearer ")

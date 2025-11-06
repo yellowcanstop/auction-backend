@@ -1,2 +1,286 @@
 package com.example.routes
 
+import com.example.config.DatabaseFactory.dbQuery
+import com.example.models.CreateGroupRequest
+import com.example.models.CreateGroupResponse
+import com.example.models.EditGroupRequest
+import com.example.models.EditGroupResponse
+import com.example.models.Groups
+import com.example.models.JoinGroupRequest
+import com.example.models.JoinGroupResponse
+import com.example.models.MemberData
+import com.example.models.Memberships
+import com.example.models.Status
+import com.example.models.Users
+import com.example.models.ViewMembersRequest
+import com.example.models.ViewMembersResponse
+import com.example.plugins.userId
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.set
+import io.ktor.server.auth.authenticate
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
+import io.ktor.server.routing.get
+import io.ktor.server.routing.patch
+import io.ktor.server.routing.post
+import io.ktor.server.routing.route
+import org.jetbrains.exposed.exceptions.ExposedSQLException
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
+
+
+fun Route.groupRoutes() {
+    authenticate("auth-jwt") {
+        route("/api/groups") {
+            post("/create") {
+                val request = call.receive<CreateGroupRequest>()
+
+                // Same creator cannot have multiple groups with the same name
+                val existingGroups = dbQuery {
+                    Groups.select(Groups.groupName).where { (Groups.creatorId eq request.creatorId) and (Groups.groupName eq request.groupName) }
+                        .singleOrNull()
+                }
+
+                if (existingGroups != null) {
+                    call.respond(HttpStatusCode.Conflict, mapOf("error" to "You already have a group with this name"))
+                    return@post
+                }
+
+                if (validateDescription(request.description)) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
+                    return@post
+                }
+
+                val newGroup = dbQuery {
+                    Groups.insert {
+                        it[groupName] = request.groupName
+                        it[description] = request.description
+                        it[creatorId] = request.creatorId
+                    }
+                }
+
+                call.respond(HttpStatusCode.Created,
+                    CreateGroupResponse(
+                        groupId = newGroup[Groups.id].value,
+                        groupName = newGroup[Groups.groupName],
+                        description = newGroup[Groups.description],
+                        inviteCode = newGroup[Groups.inviteCode],
+                        creatorId = newGroup[Groups.creatorId].value
+                ))
+            }
+
+            patch("/edit/{groupId}") {
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
+
+                val userId = call.userId()
+
+                if (!isAdminOfGroup(userId, groupId)) {
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to edit this group"))
+                    return@patch
+                }
+
+                val request = call.receive<EditGroupRequest>()
+
+                if (noGroupFound(groupId)) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Group not found"))
+                    return@patch
+                }
+
+                if (request.groupName != null) {
+                    dbQuery {
+                        Groups.update({ Groups.id eq groupId }) {
+                            it[groupName] = request.groupName
+                        }
+                    }
+                }
+
+                if (request.description != null) {
+                    if (validateDescription(request.description)) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
+                        return@patch
+                    }
+                    dbQuery {
+                        Groups.update({ Groups.id eq groupId }) {
+                            it[description] = request.description
+                        }
+                    }
+                }
+
+                if (request.autoApprove != null) {
+                    dbQuery {
+                        Groups.update({ Groups.id eq groupId }) {
+                            it[autoApprove] = request.autoApprove
+                        }
+                    }
+                }
+
+                if (request.taskPointsMin != null) {
+                    dbQuery {
+                        Groups.update({ Groups.id eq groupId }) {
+                            it[taskPointsMin] = request.taskPointsMin
+                        }
+                    }
+                }
+
+                if (request.taskPointsAverage != null) {
+                    dbQuery {
+                        Groups.update({ Groups.id eq groupId }) {
+                            it[taskPointsAverage] = request.taskPointsAverage
+                        }
+                    }
+                }
+
+                if (request.taskPointsMax != null) {
+                    dbQuery {
+                        Groups.update({ Groups.id eq groupId }) {
+                            it[taskPointsMax] = request.taskPointsMax
+                        }
+                    }
+                }
+
+                if (request.status != null) {
+                    dbQuery {
+                        Groups.update({ Groups.id eq groupId }) {
+                            it[status] = request.status
+                        }
+                    }
+                }
+
+                call.respond(HttpStatusCode.OK, EditGroupResponse(
+                    groupName = request.groupName,
+                    description = request.description,
+                    autoApprove = request.autoApprove,
+                    taskPointsMin = request.taskPointsMin,
+                    taskPointsAverage = request.taskPointsAverage,
+                    taskPointsMax = request.taskPointsMax,
+                    status = request.status
+                ))
+            }
+
+            get("/members/{groupId}") {
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
+
+                val userId = call.userId()
+
+                if (!isAdminOfGroup(userId, groupId)) {
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to view this group"))
+                    return@get
+                }
+
+                val request = call.receive<ViewMembersRequest>()
+
+                if (noGroupFound(request.groupId)) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Group not found"))
+                    return@get
+                }
+
+                val existingMembers = dbQuery {
+                    (Memberships innerJoin Users)
+                        .select(Memberships.userId, Memberships.points, Users.username)
+                        .where { (Memberships.groupId eq request.groupId) and (Memberships.status eq Status.ACTIVE)}
+                }
+
+                val membersList = existingMembers.map {
+                    MemberData(
+                        userId = it[Memberships.userId].value,
+                        username = it[Users.username],
+                        points = it[Memberships.points]
+                    )
+                }
+
+                call.respond(HttpStatusCode.OK, ViewMembersResponse(membersList))
+            }
+
+            post("/join/{inviteCode}") {
+                val request = call.receive<JoinGroupRequest>()
+
+                val group = dbQuery {
+                    Groups.select(Groups.id, Groups.groupName, Groups.description, Groups.creatorId).where { Groups.inviteCode eq request.inviteCode }.singleOrNull()
+                }
+
+                if (group == null) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Invalid invite code"))
+                    return@post
+                }
+
+                // Given unique index on (userId, groupId) for Memberships, need to handle exception if already a member
+                val membershipId = try {
+                    dbQuery {
+                        Memberships.insert {
+                            it[userId] = request.userId
+                            it[groupId] = group[Groups.id].value
+                        }[Memberships.id].value
+                    }
+                } catch (e: ExposedSQLException) {
+                    call.respond(HttpStatusCode.Conflict, mapOf("error" to "You are already a member of this group"))
+                    return@post
+                }
+
+                call.respond(HttpStatusCode.Created, JoinGroupResponse(
+                    membershipId,
+                    group[Groups.id].value,
+                    group[Groups.groupName],
+                    group[Groups.description],
+                    group[Groups.creatorId].value,
+                ))
+            }
+
+            get("/member") {
+
+            }
+
+            get("/admin") {
+
+            }
+
+            post("/leave/{groupId}") {
+
+            }
+
+            post("remove/member/{groupId}/{memberId}") {
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
+
+                val userId = call.userId()
+
+                if (!isAdminOfGroup(userId, groupId)) {
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to edit this group"))
+                    return@post
+                }
+            }
+        }
+    }
+}
+
+private fun validateDescription(description: String): Boolean {
+    if (description.length > 1000) return false
+    if (description.contains("<script>", ignoreCase = true)) return false
+    if (description.contains("</script>", ignoreCase = true)) return false
+    if (description.contains("onerror=", ignoreCase = true)) return false
+    return true
+}
+
+private suspend fun noGroupFound(groupId: Int) : Boolean {
+    val group = dbQuery {
+        Groups.select(Groups.id)
+            .where { (Groups.id eq groupId) and (Groups.status eq Status.ACTIVE) }
+            .singleOrNull()
+    }
+    return group == null
+}
+
+private suspend fun isAdminOfGroup(userId: Int, groupId: Int) : Boolean {
+    val group = dbQuery {
+        Groups.select(Groups.id, Groups.creatorId)
+            .where { (Groups.id eq groupId) and (Groups.creatorId eq userId) and (Groups.status eq Status.ACTIVE) }
+            .singleOrNull()
+    }
+    return group != null
+}
+

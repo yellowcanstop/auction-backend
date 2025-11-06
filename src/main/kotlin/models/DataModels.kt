@@ -27,18 +27,20 @@ data class LoginRequest(
 @Serializable
 data class LoginResponse(
     val token: String,
-    val user: UserData // so a separate API call is not needed
+    val user: UserData
 )
 
 // GROUPS
 @Serializable
 data class MemberData(
     val userId: Int,
+    val username: String,
     val points: Int
 )
 
 @Serializable
 data class CreateGroupRequest(
+    val creatorId: Int,
     val groupName: String,
     val description: String
 )
@@ -54,22 +56,24 @@ data class CreateGroupResponse(
 
 @Serializable
 data class EditGroupRequest(
-    val groupId: Int,
-    val autoApprove: Boolean,
-    val taskPointsMin: Int,
-    val taskPointsAverage: Int,
-    val taskPointsMax: Int,
-    val status: Status
+    val groupName: String? = null,
+    val description: String? = null,
+    val autoApprove: Boolean? = null,
+    val taskPointsMin: Int? = null,
+    val taskPointsAverage: Int? = null,
+    val taskPointsMax: Int? = null,
+    val status: Status? = null
 )
 
 @Serializable
 data class EditGroupResponse(
-    val groupId: Int,
-    val autoApprove: Boolean,
-    val taskPointsMin: Int?,
-    val taskPointsAverage: Int?,
-    val taskPointsMax: Int?,
-    val status: Status
+    val groupName: String? = null,
+    val description: String? = null,
+    val autoApprove: Boolean? = null,
+    val taskPointsMin: Int? = null,
+    val taskPointsAverage: Int? = null,
+    val taskPointsMax: Int? = null,
+    val status: Status? = null
 )
 
 @Serializable
@@ -90,6 +94,7 @@ data class JoinGroupRequest(
 
 @Serializable
 data class JoinGroupResponse(
+    val membershipId: Int,
     val groupId: Int,
     val groupName: String,
     val description: String,

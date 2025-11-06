@@ -73,7 +73,7 @@ fun Route.authRoutes() {
             val request = call.receive<LoginRequest>()
 
             val user = dbQuery {
-                Users.selectAll().where { Users.email eq request.email }.singleOrNull()
+                Users.selectAll().where { (Users.email eq request.email) and (Users.status eq Status.ACTIVE) }.singleOrNull()
             }
 
             if (user == null) {
