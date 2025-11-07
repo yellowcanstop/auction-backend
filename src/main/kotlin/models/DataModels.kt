@@ -101,6 +101,18 @@ data class JoinGroupResponse(
     val creatorId: Int
 )
 
+@Serializable
+data class GroupData(
+    val groupId: Int,
+    val groupName: String,
+    val description: String
+)
+
+@Serializable
+data class ViewGroupsResponse(
+    val groups: List<GroupData>
+)
+
 // TASKS
 @Serializable
 data class TaskData(

@@ -5,6 +5,7 @@ import com.example.models.CreateGroupRequest
 import com.example.models.CreateGroupResponse
 import com.example.models.EditGroupRequest
 import com.example.models.EditGroupResponse
+import com.example.models.GroupData
 import com.example.models.Groups
 import com.example.models.JoinGroupRequest
 import com.example.models.JoinGroupResponse
@@ -12,6 +13,7 @@ import com.example.models.MemberData
 import com.example.models.Memberships
 import com.example.models.Status
 import com.example.models.Users
+import com.example.models.ViewGroupsResponse
 import com.example.models.ViewMembersRequest
 import com.example.models.ViewMembersResponse
 import com.example.plugins.userId
@@ -232,20 +234,81 @@ fun Route.groupRoutes() {
             }
 
             get("/member") {
+                val userId = call.userId()
 
+                val groups = dbQuery {
+                    (Memberships innerJoin Groups)
+                        .select(Memberships.groupId, Groups.groupName, Groups.description)
+                        .where { (Memberships.userId eq userId) and (Memberships.status eq Status.ACTIVE) and (Groups.status eq Status.ACTIVE) }
+                }
+
+                val groupList = groups.map {
+                    GroupData(
+                        groupId = it[Memberships.groupId].value,
+                        groupName = it[Groups.groupName],
+                        description = it[Groups.description]
+                    )
+                }
+
+                call.respond(HttpStatusCode.OK, ViewGroupsResponse(groupList))
             }
 
             get("/admin") {
+                val userId = call.userId()
+
+                val groups = dbQuery {
+                    Groups.select(Groups.id, Groups.groupName, Groups.description)
+                        .where { (Groups.creatorId eq userId) and (Groups.status eq Status.ACTIVE) }
+                }
+
+                val groupList = groups.map {
+                    GroupData(
+                        groupId = it[Memberships.groupId].value,
+                        groupName = it[Groups.groupName],
+                        description = it[Groups.description]
+                    )
+                }
+
+                call.respond(HttpStatusCode.OK, ViewGroupsResponse(groupList))
 
             }
 
             post("/leave/{groupId}") {
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
 
+                val userId = call.userId()
+
+                val membership = dbQuery {
+                    Memberships.select(Memberships.status)
+                        .where { (Memberships.userId eq userId) and (Memberships.groupId eq groupId) }
+                        .singleOrNull()
+                }
+
+                if (membership == null) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "You are not a member of this group"))
+                    return@post
+                }
+
+                if (membership[Memberships.status] == Status.INACTIVE) {
+                    call.respond(HttpStatusCode.Conflict, mapOf("error" to "You have already left this group"))
+                    return@post
+                }
+
+                dbQuery {
+                    Memberships.update({ (Memberships.userId eq userId) and (Memberships.groupId eq groupId) }) {
+                        it[status] = Status.INACTIVE
+                }}
+
+                call.respond(HttpStatusCode.OK, mapOf("message" to "Successfully left the group"))
             }
 
             post("remove/member/{groupId}/{memberId}") {
                 val groupId = call.parameters["groupId"]?.toIntOrNull()
                     ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
+
+                val memberId = call.parameters["memberId"]?.toIntOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid member Id"))
 
                 val userId = call.userId()
 
@@ -253,6 +316,16 @@ fun Route.groupRoutes() {
                     call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to edit this group"))
                     return@post
                 }
+
+                // Preceding "view members" already ensures only active members in the group are shown
+
+                dbQuery {
+                    Memberships.update({ (Memberships.userId eq memberId) and (Memberships.groupId eq groupId) }) {
+                        it[status] = Status.INACTIVE
+                    }
+                }
+
+                call.respond(HttpStatusCode.OK, mapOf("message" to "Successfully removed member from the group"))
             }
         }
     }
