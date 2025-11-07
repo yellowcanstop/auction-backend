@@ -40,7 +40,6 @@ data class MemberData(
 
 @Serializable
 data class CreateGroupRequest(
-    val creatorId: Int,
     val groupName: String,
     val description: String
 )
@@ -119,15 +118,10 @@ data class TaskData(
     val taskId: Int,
     val taskName: String,
     val description: String,
-    val dueDate: String?, // ISO 8601 for locale independence
+    val dueDate: String? = null, // ISO 8601 for locale independence
     val points: Int,
     val quantity: Int,
     val requireProof: Boolean
-)
-
-@Serializable
-data class ViewTaskRequest(
-    val groupId: Int
 )
 
 @Serializable
@@ -137,10 +131,9 @@ data class ViewTaskResponse(
 
 @Serializable
 data class CreateTaskRequest(
-    val creatorId: Int,
     val taskName: String,
     val description: String,
-    val dueDate: String?,
+    val dueDate: String? = null,
     val points: Int,
     val quantity: Int,
     val requireProof: Boolean
@@ -152,14 +145,8 @@ data class CreateTaskResponse(
 )
 
 @Serializable
-data class RemoveTaskRequest(
-    val taskId: Int
-)
-
-@Serializable
-data class ClaimTaskRequest(
-    val taskId: Int,
-    val claimantId: Int
+data class ClaimTaskResponse(
+    val claimId: Int
 )
 
 @Serializable
@@ -172,9 +159,9 @@ data class CreateSubmissionRequest(
     val taskId: Int,
     val claimId: Int,
     val authorId: Int,
-    val coAuthorId: Int?,
-    val textContent: String?,
-    val imageContent: String?
+    val coAuthorId: Int? = null,
+    val textContent: String? = null,
+    val imageContent: String? = null
 )
 
 @Serializable
@@ -186,9 +173,9 @@ data class ViewClaimsRequest(
 data class ClaimData(
     val claimantName: String,
     // if submissionId and reviewDecision are null, "In Progress"
-    val submissionId: Int?, // for subsequent ViewSubmissionRequest
-    val reviewDecision: Decision?,
-    val reviewTime: String? // ISO 8601 for locale independence
+    val submissionId: Int? = null, // for subsequent ViewSubmissionRequest
+    val reviewDecision: Decision? = null,
+    val reviewTime: String? = null // ISO 8601 for locale independence
 )
 
 @Serializable
@@ -206,11 +193,11 @@ data class ViewSubmissionResponse(
     val submissionId: Int,
     val authorId: Int,
     val authorName: String,
-    val coAuthorId: Int?,
-    val coAuthorName: String?,
+    val coAuthorId: Int? = null,
+    val coAuthorName: String? = null,
     val submittedAt: String, // ISO 8601 for locale independence
-    val textContent: String?,
-    val imageContent: String?
+    val textContent: String? = null,
+    val imageContent: String? = null
 )
 
 @Serializable

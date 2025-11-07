@@ -33,6 +33,7 @@ object DatabaseFactory {
         }
     }
 
+    // Atomic (uses transaction), non-blocking call
     suspend fun <T> dbQuery(block: suspend () -> T): T =
         newSuspendedTransaction(Dispatchers.IO) { block() }
 }
