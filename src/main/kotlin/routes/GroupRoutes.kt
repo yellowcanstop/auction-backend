@@ -32,7 +32,9 @@ import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.update
+import java.util.UUID
 
 
 fun Route.groupRoutes() {
@@ -41,9 +43,11 @@ fun Route.groupRoutes() {
             post("/create") {
                 val request = call.receive<CreateGroupRequest>()
 
+                val userId = call.userId()
+
                 // Same creator cannot have multiple groups with the same name
                 val existingGroups = dbQuery {
-                    Groups.select(Groups.groupName).where { (Groups.creatorId eq request.creatorId) and (Groups.groupName eq request.groupName) }
+                    Groups.select(Groups.groupName).where { (Groups.creatorId eq userId) and (Groups.groupName eq request.groupName) }
                         .singleOrNull()
                 }
 
@@ -57,21 +61,38 @@ fun Route.groupRoutes() {
                     return@post
                 }
 
-                val newGroup = dbQuery {
-                    Groups.insert {
-                        it[groupName] = request.groupName
-                        it[description] = request.description
-                        it[creatorId] = request.creatorId
+                val code = generateInviteCode()
+                var newCode = code
+
+                val groupId = try {
+                    dbQuery {
+                        Groups.insertAndGetId {
+                            it[groupName] = request.groupName
+                            it[description] = request.description
+                            it[creatorId] = userId
+                            it[inviteCode] = code
+                        }
+                    }
+                } catch (e: ExposedSQLException) {
+                    // Retry with new invite code if rare UUID collision
+                    newCode = generateInviteCode()
+                    dbQuery {
+                        Groups.insertAndGetId {
+                            it[groupName] = request.groupName
+                            it[description] = request.description
+                            it[creatorId] = userId
+                            it[inviteCode] = newCode
+                        }
                     }
                 }
 
                 call.respond(HttpStatusCode.Created,
                     CreateGroupResponse(
-                        groupId = newGroup[Groups.id].value,
-                        groupName = newGroup[Groups.groupName],
-                        description = newGroup[Groups.description],
-                        inviteCode = newGroup[Groups.inviteCode],
-                        creatorId = newGroup[Groups.creatorId].value
+                        groupId = groupId.value,
+                        groupName = request.groupName,
+                        description = request.description,
+                        inviteCode = newCode,
+                        creatorId = userId
                 ))
             }
 
@@ -331,7 +352,7 @@ fun Route.groupRoutes() {
     }
 }
 
-private fun validateDescription(description: String): Boolean {
+fun validateDescription(description: String): Boolean {
     if (description.length > 1000) return false
     if (description.contains("<script>", ignoreCase = true)) return false
     if (description.contains("</script>", ignoreCase = true)) return false
@@ -348,7 +369,7 @@ private suspend fun noGroupFound(groupId: Int) : Boolean {
     return group == null
 }
 
-private suspend fun isAdminOfGroup(userId: Int, groupId: Int) : Boolean {
+suspend fun isAdminOfGroup(userId: Int, groupId: Int) : Boolean {
     val group = dbQuery {
         Groups.select(Groups.id, Groups.creatorId)
             .where { (Groups.id eq groupId) and (Groups.creatorId eq userId) and (Groups.status eq Status.ACTIVE) }
@@ -357,3 +378,9 @@ private suspend fun isAdminOfGroup(userId: Int, groupId: Int) : Boolean {
     return group != null
 }
 
+fun generateInviteCode(): String {
+    return UUID.randomUUID().toString()
+        .replace("-", "")
+        .substring(0, 10) // 10-character, as per database schema
+        .uppercase()
+}
