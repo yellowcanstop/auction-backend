@@ -129,12 +129,19 @@ data class ViewTaskResponse(
     val tasks: List<TaskData>
 )
 
+enum class Difficulty {
+    EASY,
+    AVERAGE,
+    HARD
+}
+
 @Serializable
 data class CreateTaskRequest(
     val taskName: String,
     val description: String,
     val dueDate: String? = null,
-    val points: Int,
+    val points: Int? = null,
+    val difficulty: Difficulty? = null,
     val quantity: Int,
     val requireProof: Boolean
 )

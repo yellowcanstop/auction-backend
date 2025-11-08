@@ -7,6 +7,9 @@ import com.example.models.Claims
 import com.example.models.CreateSubmissionRequest
 import com.example.models.CreateTaskRequest
 import com.example.models.CreateTaskResponse
+import com.example.models.Difficulty
+import com.example.models.GradeSubmissionRequest
+import com.example.models.Groups
 import com.example.models.Memberships
 import com.example.models.ReviewData
 import com.example.models.Reviews
@@ -40,6 +43,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import javax.swing.GroupLayout
 import kotlin.and
 import kotlin.text.get
 import kotlin.text.set
@@ -88,7 +92,7 @@ fun Route.taskRoutes() {
                 val userId = call.userId()
 
                 if (!isAdminOfGroup(userId, groupId)) {
-                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to edit this group"))
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to create a task"))
                     return@post
                 }
 
@@ -99,9 +103,53 @@ fun Route.taskRoutes() {
                     return@post
                 }
 
-                if (request.points < 0 || request.quantity < 1) {
+                if (request.quantity < 1) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Points must be non-negative and quantity must be at least 1"))
                     return@post
+                }
+
+                val taskLimits = dbQuery {
+                    Groups.select(Groups.id, Groups.taskPointsMax, Groups.taskPointsMin, Groups.taskPointsAverage )
+                        .where { (Groups.id eq groupId) and (Groups.status eq Status.ACTIVE) }
+                        .singleOrNull()
+                }
+
+                if (taskLimits == null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Group not found"))
+                    return@post
+                }
+                val maxPoints = taskLimits[Groups.taskPointsMax]
+                val minPoints = taskLimits[Groups.taskPointsMin]
+                val avgPoints = taskLimits[Groups.taskPointsAverage]
+                var points = request.points
+
+                if (request.points != null) {
+                    if (request.points < 0) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Points must be non-negative"))
+                        return@post
+                    }
+                    if (maxPoints != null && request.points > maxPoints) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Task points exceed group maximum of $maxPoints"))
+                        return@post
+                    }
+                    if (minPoints != null && request.points < minPoints) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Task points below group minimum of $minPoints"))
+                        return@post
+                    }
+                } else {
+                    if (request.difficulty == null) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Either points or difficulty must be specified"))
+                        return@post
+                    }
+                    if (minPoints == null || avgPoints == null || maxPoints == null) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "You need to set task point ranges for the group to use difficulty-based point assignment"))
+                        return@post
+                    }
+                    points = when (request.difficulty) {
+                        Difficulty.EASY -> minPoints
+                        Difficulty.AVERAGE-> avgPoints
+                        Difficulty.HARD -> maxPoints
+                    }
                 }
 
                 val taskId = dbQuery {
@@ -111,7 +159,7 @@ fun Route.taskRoutes() {
                         it[Tasks.taskName] = request.taskName
                         it[Tasks.description] = request.description
                         it[Tasks.dueDate] = request.dueDate?.let { date -> LocalDateTime.parse(date, DateTimeFormatter.ISO_DATE_TIME)}
-                        it[Tasks.points] = request.points
+                        it[Tasks.points] = points
                         it[Tasks.quantity] = request.quantity
                         it[Tasks.requireProof] = request.requireProof
                     }
@@ -123,7 +171,7 @@ fun Route.taskRoutes() {
                         taskName = request.taskName,
                         description = request.description,
                         dueDate = request.dueDate,
-                        points = request.points,
+                        points = points,
                         quantity = request.quantity,
                         requireProof = request.requireProof
                     )
@@ -140,7 +188,7 @@ fun Route.taskRoutes() {
                 val userId = call.userId()
 
                 if (!isAdminOfGroup(userId, groupId)) {
-                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to edit this group"))
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to remove a task"))
                     return@post
                 }
 
@@ -244,9 +292,12 @@ fun Route.taskRoutes() {
                 call.respond(HttpStatusCode.OK, ClaimResponse(claimId))
             }
 
-            post("/submit/{claimId}") {
+            post("/submit/{groupId}/{claimId}") {
                 val claimId = call.parameters["claimId"]?.toIntOrNull()
                     ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid claim ID"))
+
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
 
                 val userId = call.userId()
 
@@ -293,6 +344,16 @@ fun Route.taskRoutes() {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
                     return@post
                 }
+
+                val autoApprove = dbQuery {
+                    Groups.select(Groups.id, Groups.autoApprove)
+                        .where { (Groups.id eq groupId) and (Groups.status eq Status.ACTIVE) }
+                        .singleOrNull()
+                }
+
+                if (autoApprove?.get(Groups.autoApprove) == true) {
+                    // TODO award points
+                }
             }
 
             get("/claims/{groupId}/{taskId}") {
@@ -305,7 +366,7 @@ fun Route.taskRoutes() {
                 val userId = call.userId()
 
                 if (!isAdminOfGroup(userId, groupId)) {
-                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to edit this group"))
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to view claims"))
                     return@get
                 }
 
@@ -385,6 +446,47 @@ fun Route.taskRoutes() {
                 }
 
                 call.respond(HttpStatusCode.OK, ViewClaimsResponse(claimList))
+            }
+
+            post("/grade/{groupId}/{submissionId}") {
+                val submissionId = call.parameters["submissionId"]?.toIntOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid submission ID"))
+
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
+
+                val userId = call.userId()
+
+                val request = call.receive<GradeSubmissionRequest>()
+
+                if (!isAdminOfGroup(userId, groupId)) {
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to grade this submission"))
+                    return@post
+                }
+
+                try {
+                    dbQuery {
+                        val submission = (Submissions innerJoin Tasks)
+                            .select(Submissions.id, Submissions.claimId, Submissions.taskId, Submissions.authorId, Submissions.coAuthorId, Submissions.status, Tasks.id, Tasks.points)
+                            .where { (Submissions.id eq submissionId) and (Submissions.status eq Status.ACTIVE) and (Submissions.taskId eq Tasks.id)}
+                            .singleOrNull()
+                            ?: throw IllegalStateException("Submission not found")
+
+                        Reviews.insert {
+                            it[Reviews.claimId] = submission[Submissions.claimId]
+                            it[Reviews.submissionId] = submissionId
+                            it[Reviews.reviewerId] = userId
+                            it[Reviews.decision] = request.decision
+                        }
+
+                        // TODO award points
+                    }
+                } catch (e: IllegalStateException) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+                    return@post
+                }
+
+                call.respond(HttpStatusCode.OK, mapOf("message" to "Submission graded successfully"))
             }
         }
     }
