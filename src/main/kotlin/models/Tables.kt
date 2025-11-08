@@ -61,22 +61,24 @@ object Tasks : IntIdTable("tasks") {
 
 object Claims : IntIdTable("claims") {
     val taskId = reference("task_id", Tasks)
-    val claimantId = reference("claimant_id", Memberships)
+    val claimantId = reference("claimant_id", Users)
     val claimedAt = datetime("claimed_at").clientDefault { LocalDateTime.now() }
-    val status = enumeration("status", Status::class ).default(Status.ACTIVE)
     val releasedAt = datetime("released_at").nullable()
 }
 
 object Submissions : IntIdTable("submissions") {
+    val taskId = reference("task_id", Tasks)
     val claimId = reference("claim_id", Claims)
-    val authorId = reference("author_id", Memberships)
-    val coAuthorId = reference("co_author_id", Memberships).nullable()
+    val authorId = reference("author_id", Users)
+    val coAuthorId = reference("co_author_id", Users).nullable()
     val submittedAt = datetime("submitted_at").clientDefault { LocalDateTime.now() }
     val textContent = text("text_content").nullable()
     val imageContent = varchar("image_content", 255).nullable()
+    val status = enumeration("status", Status::class ).default(Status.ACTIVE)
 }
 
 object Reviews : IntIdTable("reviews") {
+    val claimId = reference("claim_id", Claims)
     val submissionId = reference("submission_id", Submissions)
     val reviewerId = reference("reviewer_id", Users)
     val reviewedAt = datetime("reviewed_at").clientDefault { LocalDateTime.now() }
@@ -99,19 +101,12 @@ object Auctions : IntIdTable("auctions") {
 
 object Bids : IntIdTable("bids") {
     val auctionId = reference("auction_id", Auctions)
-    val bidderId = reference("bidder_id", Memberships)
+    val bidderId = reference("bidder_id", Users)
     val bidAmount = integer("bid_amount")
     val bidAt = datetime("bid_at").clientDefault { LocalDateTime.now() }
 
     init {
         index(false, auctionId, bidAmount) // speed up highest bid lookup
         index(false, bidderId, bidAt) // speed up user bid history lookup
-    }
-}
-
-fun initDatabase(url: String, driver: String, user: String, password: String) {
-    Database.connect(url = url, driver = driver, user = user, password = password)
-    transaction {
-        SchemaUtils.create(Users, Groups, Memberships, Tasks, Claims, Submissions, Reviews, Auctions, Bids)
     }
 }

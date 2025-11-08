@@ -1,14 +1,22 @@
 package com.example.routes
 
 import com.example.config.DatabaseFactory.dbQuery
-import com.example.models.ClaimTaskResponse
+import com.example.models.ClaimData
+import com.example.models.ClaimResponse
 import com.example.models.Claims
+import com.example.models.CreateSubmissionRequest
 import com.example.models.CreateTaskRequest
 import com.example.models.CreateTaskResponse
 import com.example.models.Memberships
+import com.example.models.ReviewData
+import com.example.models.Reviews
 import com.example.models.Status
+import com.example.models.SubmissionData
+import com.example.models.Submissions
 import com.example.models.TaskData
 import com.example.models.Tasks
+import com.example.models.Users
+import com.example.models.ViewClaimsResponse
 import com.example.models.ViewTaskResponse
 import com.example.plugins.userId
 import io.ktor.http.HttpStatusCode
@@ -20,7 +28,11 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.coroutines.NonCancellable.isActive
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.minus
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
+import org.jetbrains.exposed.sql.alias
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.insertAndGetId
@@ -51,7 +63,7 @@ fun Route.taskRoutes() {
 
                 val tasks = dbQuery {
                     Tasks.select(Tasks.id, Tasks.taskName, Tasks.description, Tasks.status, Tasks.dueDate, Tasks.points, Tasks.quantity, Tasks.requireProof)
-                        .where { (Tasks.groupId eq groupId) and (Tasks.status eq Status.ACTIVE)}
+                        .where { (Tasks.groupId eq groupId) and (Tasks.status eq Status.ACTIVE) and (Tasks.quantity neq 0)}
                 }
 
                 val taskList = tasks.map {
@@ -136,9 +148,15 @@ fun Route.taskRoutes() {
                     Tasks.update({ Tasks.id eq taskId }) {
                         it[status] = Status.INACTIVE
                     }
+                    Claims.update( { (Claims.taskId eq taskId) and (Claims.releasedAt neq null) }) {
+                        it[releasedAt] = LocalDateTime.now()
+                    }
+                    Submissions.update( { Submissions.taskId eq taskId }) {
+                        it[status] = Status.INACTIVE
+                    }
                 }
 
-                call.respond(HttpStatusCode.OK, mapOf("message" to "Task deleted successfully"))
+                call.respond(HttpStatusCode.OK, mapOf("message" to "Task and all associated claims and submissions deleted successfully"))
             }
 
             post("/claim/{groupId}/{taskId}") {
@@ -157,7 +175,7 @@ fun Route.taskRoutes() {
 
                 val existingClaim = dbQuery {
                     Claims.select(Claims.id)
-                        .where { (Claims.taskId eq taskId) and (Claims.claimantId eq userId) and (Claims.status eq Status.ACTIVE) }
+                        .where { (Claims.taskId eq taskId) and (Claims.claimantId eq userId) and (Claims.releasedAt neq null) }
                         .singleOrNull()
                 }
 
@@ -194,7 +212,179 @@ fun Route.taskRoutes() {
                     return@post
                 }
 
-                call.respond(HttpStatusCode.Created, ClaimTaskResponse(claimId))
+                call.respond(HttpStatusCode.Created, ClaimResponse(claimId))
+            }
+
+            post("/unclaim/{claimId}") {
+                val claimId = call.parameters["claimId"]?.toIntOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid claim ID"))
+
+                val userId = call.userId()
+
+                try {
+                    dbQuery {
+                        val claim = Claims.select(Claims.taskId)
+                            .where { (Claims.id eq claimId) and (Claims.claimantId eq userId) and (Claims.releasedAt neq null) }
+                            .singleOrNull()
+                            ?: throw IllegalStateException("You do not have an active claim.")
+
+                        Claims.update({ Claims.id eq claimId }) {
+                            it[releasedAt] = LocalDateTime.now()
+                        }
+
+                        Tasks.update({ Tasks.id eq claim[Claims.taskId] }) {
+                            it.update(quantity, quantity + 1) // use SQL to directly increment
+                        }
+                    }
+                } catch (e: IllegalStateException) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+                    return@post
+                }
+
+                call.respond(HttpStatusCode.OK, ClaimResponse(claimId))
+            }
+
+            post("/submit/{claimId}") {
+                val claimId = call.parameters["claimId"]?.toIntOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid claim ID"))
+
+                val userId = call.userId()
+
+                val request = call.receive<CreateSubmissionRequest>()
+
+                try {
+                    dbQuery {
+                        val claim = Claims.select(Claims.taskId, Claims.claimantId)
+                                .where { (Claims.id eq claimId) and (Claims.claimantId eq userId) and (Claims.releasedAt neq null) }
+                                .singleOrNull()
+                                ?: throw IllegalStateException("You do not have an active claim.")
+
+                        val task = Tasks.select(Tasks.requireProof, Tasks.groupId, Tasks.points, Tasks.dueDate)
+                            .where { (Tasks.id eq claim[Claims.taskId]) and (Tasks.status eq Status.ACTIVE) }
+                            .singleOrNull()
+                            ?: throw IllegalStateException("Task not available")
+
+                        if (task[Tasks.requireProof]) {
+                            if (request.textContent.isNullOrBlank() || request.imageContent.isNullOrBlank()) {
+                                throw IllegalStateException("This task requires proof of completion.")
+                            }
+                        }
+
+                        if (request.coAuthorId != null) {
+                            Memberships.select(Memberships.id)
+                                .where { (Memberships.userId eq request.coAuthorId) and (Memberships.groupId eq task[Tasks.groupId]) and (Memberships.status eq Status.ACTIVE) }
+                                .singleOrNull()
+                                ?: throw IllegalStateException("Co-author is not an active member of the group.")
+                        }
+
+                        if (task[Tasks.dueDate]?.isBefore(LocalDateTime.now()) == true) {
+                            throw IllegalStateException("Task expired")
+                        }
+
+                        Submissions.insert {
+                            it[Submissions.claimId] = claimId
+                            it[Submissions.authorId] = userId
+                            it[Submissions.coAuthorId] = request.coAuthorId
+                            it[Submissions.textContent] = request.textContent
+                            it[Submissions.imageContent] = request.imageContent
+                        }
+                    }
+                } catch(e: IllegalStateException) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+                    return@post
+                }
+            }
+
+            get("/claims/{groupId}/{taskId}") {
+                val taskId = call.parameters["taskId"]?.toIntOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid task ID"))
+
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
+
+                val userId = call.userId()
+
+                if (!isAdminOfGroup(userId, groupId)) {
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You do not have permission to edit this group"))
+                    return@get
+                }
+
+                val task = dbQuery {
+                    Tasks.select(Tasks.id)
+                        .where { (Tasks.id eq taskId) and (Tasks.status eq Status.ACTIVE) }
+                        .singleOrNull()
+                }
+
+                if (task == null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Task not found"))
+                    return@get
+                }
+
+                val claims = dbQuery {
+                    (Claims innerJoin Users)
+                        .select(Claims.id, Claims.claimantId, Users.username)
+                        .where { (Claims.taskId eq taskId) and (Claims.releasedAt neq null) and (Claims.claimantId eq Users.id) }
+                }
+
+                val claimIds = claims.map { it[Claims.id].value }
+
+                if (claimIds.isEmpty()) {
+                    call.respond(HttpStatusCode.OK, ViewClaimsResponse(emptyList()))
+                    return@get
+                }
+
+                // Although submission is one-to-one with claim,
+                // fetch all submissions for all claims in one query
+                // instead of querying per claimId
+                val submissions = dbQuery {
+                    Submissions.select(Submissions.id, Submissions.claimId, Submissions.authorId, Submissions.coAuthorId, Submissions.submittedAt, Submissions.textContent, Submissions.imageContent)
+                        .where { (Submissions.claimId inList claimIds) and (Submissions.status eq Status.ACTIVE) }
+                    }.groupBy { it[Submissions.claimId].value }
+
+                // fetch co-author names
+                val coAuthorIds = submissions.values.flatten().mapNotNull { it[Submissions.coAuthorId]?.value }.toSet()
+                val coAuthorNames = if (coAuthorIds.isNotEmpty()) {
+                    dbQuery {
+                        Users.select(Users.id, Users.username)
+                            .where { Users.id inList coAuthorIds }
+                    }.associate { it[Users.id].value to it[Users.username] }
+                } else emptyMap()
+
+                // review is one-to-one with submission which is one-to-one with claim
+                val reviews = dbQuery {
+                    Reviews.select(Reviews.id, Reviews.claimId, Reviews.submissionId, Reviews.reviewedAt, Reviews.decision)
+                            .where { Reviews.claimId inList claimIds }
+                    }.groupBy { it[Reviews.claimId].value }
+
+                // build list of ClaimData
+                val claimList = claims.map { claimRow ->
+                    ClaimData(
+                        claimRow[Claims.id].value,
+                        claimRow[Claims.claimantId].value,
+                        claimRow[Users.username],
+                        submissions[claimRow[Claims.id].value]?.firstOrNull()?.let { subRow ->
+                            SubmissionData(
+                                submissionId = subRow[Submissions.id].value,
+                                authorId = claimRow[Claims.claimantId].value,
+                                authorName = claimRow[Users.username],
+                                coAuthorId = subRow[Submissions.coAuthorId]?.value,
+                                coAuthorName = coAuthorNames[subRow[Submissions.coAuthorId]?.value],
+                                submittedAt = subRow[Submissions.submittedAt].toString(),
+                                textContent = subRow[Submissions.textContent],
+                                imageContent = subRow[Submissions.imageContent]
+                            )
+                        },
+                        reviews[claimRow[Claims.id].value]?.firstOrNull()?.let { revRow ->
+                            ReviewData(
+                                reviewId = revRow[Reviews.id].value,
+                                reviewedAt = revRow[Reviews.reviewedAt].toString(),
+                                decision = revRow[Reviews.decision]
+                            )
+                        }
+                    )
+                }
+
+                call.respond(HttpStatusCode.OK, ViewClaimsResponse(claimList))
             }
         }
     }

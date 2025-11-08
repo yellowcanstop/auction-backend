@@ -145,37 +145,25 @@ data class CreateTaskResponse(
 )
 
 @Serializable
-data class ClaimTaskResponse(
-    val claimId: Int
-)
-
-@Serializable
-data class UnclaimTaskRequest(
+data class ClaimResponse(
     val claimId: Int
 )
 
 @Serializable
 data class CreateSubmissionRequest(
-    val taskId: Int,
-    val claimId: Int,
-    val authorId: Int,
     val coAuthorId: Int? = null,
     val textContent: String? = null,
     val imageContent: String? = null
 )
 
 @Serializable
-data class ViewClaimsRequest(
-    val taskId: Int
-)
-
-@Serializable
 data class ClaimData(
+    val claimId: Int,
+    val claimantId: Int,
     val claimantName: String,
-    // if submissionId and reviewDecision are null, "In Progress"
-    val submissionId: Int? = null, // for subsequent ViewSubmissionRequest
-    val reviewDecision: Decision? = null,
-    val reviewTime: String? = null // ISO 8601 for locale independence
+    // if submission and review are empty, "In Progress"
+    val submission: SubmissionData?,
+    val review: ReviewData?
 )
 
 @Serializable
@@ -183,21 +171,24 @@ data class ViewClaimsResponse(
     val claims: List<ClaimData>
 )
 
-@Serializable
-data class ViewSubmissionRequest(
-    val submissionId: Int
-)
 
 @Serializable
-data class ViewSubmissionResponse(
+data class SubmissionData(
     val submissionId: Int,
-    val authorId: Int,
-    val authorName: String,
+    val authorId: Int, // same as ClaimantId
+    val authorName: String, // same as ClaimantName
     val coAuthorId: Int? = null,
     val coAuthorName: String? = null,
     val submittedAt: String, // ISO 8601 for locale independence
     val textContent: String? = null,
     val imageContent: String? = null
+)
+
+@Serializable
+data class ReviewData(
+    val reviewId: Int,
+    val reviewedAt: String, // ISO 8601 for locale independence
+    val decision: Decision
 )
 
 @Serializable
