@@ -35,6 +35,7 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
+import kotlin.text.set
 
 
 fun Route.groupRoutes() {
@@ -114,63 +115,20 @@ fun Route.groupRoutes() {
                     return@patch
                 }
 
-                if (request.groupName != null) {
-                    dbQuery {
-                        Groups.update({ Groups.id eq groupId }) {
-                            it[groupName] = request.groupName
-                        }
-                    }
+                if (request.description != null && validateDescription(request.description)) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
+                    return@patch
                 }
 
-                if (request.description != null) {
-                    if (validateDescription(request.description)) {
-                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
-                        return@patch
-                    }
-                    dbQuery {
-                        Groups.update({ Groups.id eq groupId }) {
-                            it[description] = request.description
-                        }
-                    }
-                }
-
-                if (request.autoApprove != null) {
-                    dbQuery {
-                        Groups.update({ Groups.id eq groupId }) {
-                            it[autoApprove] = request.autoApprove
-                        }
-                    }
-                }
-
-                if (request.taskPointsMin != null) {
-                    dbQuery {
-                        Groups.update({ Groups.id eq groupId }) {
-                            it[taskPointsMin] = request.taskPointsMin
-                        }
-                    }
-                }
-
-                if (request.taskPointsAverage != null) {
-                    dbQuery {
-                        Groups.update({ Groups.id eq groupId }) {
-                            it[taskPointsAverage] = request.taskPointsAverage
-                        }
-                    }
-                }
-
-                if (request.taskPointsMax != null) {
-                    dbQuery {
-                        Groups.update({ Groups.id eq groupId }) {
-                            it[taskPointsMax] = request.taskPointsMax
-                        }
-                    }
-                }
-
-                if (request.status != null) {
-                    dbQuery {
-                        Groups.update({ Groups.id eq groupId }) {
-                            it[status] = request.status
-                        }
+                dbQuery {
+                    Groups.update({ Groups.id eq groupId }) {
+                        request.groupName?.let { name -> it[groupName] = name }
+                        request.description?.let { desc -> it[description] = desc }
+                        request.autoApprove?.let { auto -> it[autoApprove] = auto }
+                        request.taskPointsMin?.let { min -> it[taskPointsMin] = min }
+                        request.taskPointsAverage?.let { avg -> it[taskPointsAverage] = avg }
+                        request.taskPointsMax?.let { max -> it[taskPointsMax] = max }
+                        request.status?.let { stat -> it[status] = stat }
                     }
                 }
 
