@@ -1,6 +1,5 @@
 package com.example.plugins
 
-import com.auth0.jwt.JWT
 import com.example.config.Security
 import io.ktor.http.*
 import io.ktor.server.application.*
