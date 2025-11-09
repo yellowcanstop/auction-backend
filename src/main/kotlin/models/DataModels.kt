@@ -211,7 +211,7 @@ data class AuctionData(
     val auctionId: Int,
     val rewardName: String,
     val description: String,
-    val rewardImage: String,
+    val rewardImage: String?,
     val startTime: String,
     val endTime: String,
     val minimumBid: Int,
@@ -236,18 +236,8 @@ data class CreateAuctionResponse(
 )
 
 @Serializable
-data class ViewAuctionsRequest(
-    val groupId: Int
-)
-
-@Serializable
 data class ViewAuctionsResponse(
     val auctions: List<AuctionData>
-)
-
-@Serializable
-data class ViewBidsRequest(
-    val auctionId: Int
 )
 
 @Serializable
@@ -257,7 +247,6 @@ data class ViewBidsResponse(
 
 @Serializable
 data class BidData(
-    val auctionId: Int,
     val bidderId: Int,
     val bidderName: String,
     val bidAmount: Int,
@@ -266,12 +255,10 @@ data class BidData(
 
 @Serializable
 data class BidRequest(
-    val auctionId: Int,
-    val bidderId: Int,
     val bidAmount: Int
 )
 
 @Serializable
 data class BidResponse(
-    val bids: List<BidData>
+    val bidId: Int
 )

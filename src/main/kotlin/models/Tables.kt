@@ -106,6 +106,7 @@ object Bids : IntIdTable("bids") {
     val bidAt = datetime("bid_at").clientDefault { LocalDateTime.now() }
 
     init {
+        uniqueIndex(auctionId, bidAmount) // prevent duplicate bids
         index(false, auctionId, bidAmount) // speed up highest bid lookup
         index(false, bidderId, bidAt) // speed up user bid history lookup
     }
