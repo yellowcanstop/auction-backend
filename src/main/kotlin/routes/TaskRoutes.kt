@@ -7,6 +7,7 @@ import com.example.models.Claims
 import com.example.models.CreateSubmissionRequest
 import com.example.models.CreateTaskRequest
 import com.example.models.CreateTaskResponse
+import com.example.models.Decision
 import com.example.models.Difficulty
 import com.example.models.GradeSubmissionRequest
 import com.example.models.Groups
@@ -315,11 +316,19 @@ fun Route.taskRoutes() {
                             .singleOrNull()
                             ?: throw IllegalStateException("Task not available")
 
+                        if (task[Tasks.dueDate]?.isBefore(LocalDateTime.now()) == true) {
+                            throw IllegalStateException("Task expired")
+                        }
+
                         if (task[Tasks.requireProof]) {
                             if (request.textContent.isNullOrBlank() || request.imageContent.isNullOrBlank()) {
                                 throw IllegalStateException("This task requires proof of completion.")
                             }
                         }
+
+                        Memberships.select(Memberships.id).where { (Memberships.userId eq userId) and (Memberships.groupId eq task[Tasks.groupId]) and (Memberships.status eq Status.ACTIVE) }
+                            .singleOrNull()
+                            ?: throw IllegalStateException("You are not an active member of the group.")
 
                         if (request.coAuthorId != null) {
                             Memberships.select(Memberships.id)
@@ -328,31 +337,43 @@ fun Route.taskRoutes() {
                                 ?: throw IllegalStateException("Co-author is not an active member of the group.")
                         }
 
-                        if (task[Tasks.dueDate]?.isBefore(LocalDateTime.now()) == true) {
-                            throw IllegalStateException("Task expired")
-                        }
-
-                        Submissions.insert {
+                        val subId = Submissions.insertAndGetId {
                             it[Submissions.claimId] = claimId
                             it[Submissions.authorId] = userId
                             it[Submissions.coAuthorId] = request.coAuthorId
                             it[Submissions.textContent] = request.textContent
                             it[Submissions.imageContent] = request.imageContent
                         }
+
+                        val autoApprove = Groups.select(Groups.id, Groups.autoApprove, Groups.creatorId)
+                                .where { (Groups.id eq groupId) and (Groups.status eq Status.ACTIVE) }
+                                .singleOrNull()
+
+                        if (autoApprove?.get(Groups.autoApprove) == true) {
+                            Reviews.insert {
+                                it[Reviews.claimId] = claimId
+                                it[Reviews.submissionId] = subId
+                                it[Reviews.reviewerId] = autoApprove[Groups.creatorId]
+                                it[Reviews.decision] = Decision.ACCEPT
+                            }
+                            if (request.coAuthorId == null) {
+                                Memberships.update({ (Memberships.id eq userId) and (Memberships.groupId eq groupId) }) {
+                                    it[points] = points + task[Tasks.points]
+                                }
+                            } else {
+                                val splitPoints = task[Tasks.points] / 2
+                                Memberships.update({ (Memberships.id eq userId) and (Memberships.groupId eq groupId) }) {
+                                    it[points] = points + splitPoints
+                                }
+                                Memberships.update({ (Memberships.id eq request.coAuthorId) and (Memberships.groupId eq groupId) }) {
+                                    it[points] = points + splitPoints
+                                }
+                            }
+                        }
                     }
                 } catch(e: IllegalStateException) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
                     return@post
-                }
-
-                val autoApprove = dbQuery {
-                    Groups.select(Groups.id, Groups.autoApprove)
-                        .where { (Groups.id eq groupId) and (Groups.status eq Status.ACTIVE) }
-                        .singleOrNull()
-                }
-
-                if (autoApprove?.get(Groups.autoApprove) == true) {
-                    // TODO award points
                 }
             }
 
@@ -472,6 +493,14 @@ fun Route.taskRoutes() {
                             .singleOrNull()
                             ?: throw IllegalStateException("Submission not found")
 
+                        val existingReview = Reviews.select(Reviews.id)
+                            .where { (Reviews.submissionId eq submissionId) }
+                            .singleOrNull()
+
+                        if (existingReview != null) {
+                            throw IllegalStateException("Submission has already been graded")
+                        }
+
                         Reviews.insert {
                             it[Reviews.claimId] = submission[Submissions.claimId]
                             it[Reviews.submissionId] = submissionId
@@ -479,7 +508,25 @@ fun Route.taskRoutes() {
                             it[Reviews.decision] = request.decision
                         }
 
-                        // TODO award points
+                        if (request.decision == Decision.ACCEPT) {
+                            val taskPoints = submission[Tasks.points]
+                            val authorId = submission[Submissions.authorId].value
+                            val coAuthorId = submission[Submissions.coAuthorId]?.value
+
+                            if (coAuthorId == null) {
+                                Memberships.update({ (Memberships.userId eq authorId) and (Memberships.groupId eq groupId) }) {
+                                    it[points] = points + taskPoints
+                                }
+                            } else {
+                                val splitPoints = taskPoints / 2
+                                Memberships.update({ (Memberships.userId eq authorId) and (Memberships.groupId eq groupId) }) {
+                                    it[points] = points + splitPoints
+                                }
+                                Memberships.update({ (Memberships.userId eq coAuthorId) and (Memberships.groupId eq groupId) }) {
+                                    it[points] = points + splitPoints
+                                }
+                            }
+                        }
                     }
                 } catch (e: IllegalStateException) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
