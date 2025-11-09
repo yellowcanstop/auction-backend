@@ -90,7 +90,7 @@ object Auctions : IntIdTable("auctions") {
     val creatorId = reference("creator_id", Users)
     val rewardName = varchar("reward_name", 255)
     val description = text("description")
-    val rewardImage = varchar("reward_image", 255)
+    val rewardImage = varchar("reward_image", 255).nullable()
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
     val startTime = datetime("start_time")
     val endTime = datetime( "end_time")

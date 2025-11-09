@@ -220,19 +220,19 @@ data class AuctionData(
 
 @Serializable
 data class CreateAuctionRequest(
-    val creatorId: Int,
     val rewardName: String,
     val description: String,
-    val rewardImage: String,
-    val startTime: String,
+    val rewardImage: String? = null,
+    val startTime: String? = null,
+    val startNow: Boolean = false,
     val endTime: String,
-    val minimumBid: Int,
-    val bidIncrement: Int
+    val minimumBid: Int? = null,
+    val bidIncrement: Int? = null
 )
 
 @Serializable
 data class CreateAuctionResponse(
-    val auction: AuctionData
+    val auctionId: Int
 )
 
 @Serializable
