@@ -193,6 +193,17 @@ fun Route.taskRoutes() {
                     return@post
                 }
 
+                val task = dbQuery {
+                    Tasks.select(Tasks.id)
+                        .where { (Tasks.id eq taskId) and (Tasks.status eq Status.ACTIVE) }
+                        .singleOrNull()
+                }
+
+                if (task == null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Task not found"))
+                    return@post
+                }
+
                 dbQuery {
                     Tasks.update({ Tasks.id eq taskId }) {
                         it[status] = Status.INACTIVE
