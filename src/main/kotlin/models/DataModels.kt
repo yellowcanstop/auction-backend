@@ -87,7 +87,6 @@ data class ViewMembersResponse(
 
 @Serializable
 data class JoinGroupRequest(
-    val userId: Int,
     val inviteCode: String
 )
 

@@ -179,6 +179,8 @@ fun Route.groupRoutes() {
             }
 
             post("/join/{inviteCode}") {
+                val userId = call.userId()
+
                 val request = call.receive<JoinGroupRequest>()
 
                 val group = dbQuery {
@@ -194,8 +196,8 @@ fun Route.groupRoutes() {
                 val membershipId = try {
                     dbQuery {
                         Memberships.insert {
-                            it[userId] = request.userId
-                            it[groupId] = group[Groups.id].value
+                            it[Memberships.userId] = userId
+                            it[Memberships.groupId] = group[Groups.id].value
                         }[Memberships.id].value
                     }
                 } catch (e: ExposedSQLException) {
