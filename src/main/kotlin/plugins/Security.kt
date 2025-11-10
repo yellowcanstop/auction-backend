@@ -14,7 +14,7 @@ fun Application.configureSecurity() {
 
             validate { credential ->
                 val token = request.headers["Authorization"]?.removePrefix("Bearer ")
-                val userId = token?.let { Security.verifyToken(it) }
+                val userId = token?.let { Security.verifyAccessToken(it) }
                 userId?.let { JWTPrincipal(credential.payload) }
             }
 
@@ -30,5 +30,5 @@ fun Application.configureSecurity() {
 fun ApplicationCall.userId(): Int {
     val principal = principal<JWTPrincipal>()
     val token = request.headers["Authorization"]?.removePrefix("Bearer ")
-    return Security.verifyToken(token!!)!!
+    return Security.verifyAccessToken(token!!)!!
 }

@@ -14,6 +14,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import java.security.SecureRandom
 import java.util.Base64
+import kotlin.and
 
 fun Route.authRoutes() {
     route("/api/auth") {
@@ -63,9 +64,9 @@ fun Route.authRoutes() {
                 }[Users.id].value
             }
 
-            val token = Security.generateToken(userId, request.email)
+            val tokenPair = Security.generateTokenPair(userId, request.email)
 
-            call.respond(HttpStatusCode.Created, LoginResponse(token, UserData(userId, request.email, request.username)))
+            call.respond(HttpStatusCode.Created, mapOf("message" to "Successful registration. Please log in to continue."))
         }
 
 
@@ -104,9 +105,36 @@ fun Route.authRoutes() {
                 return@post
             }
 
-            val token = Security.generateToken(user[Users.id].value, request.email)
+            val tokenPair = Security.generateTokenPair(user[Users.id].value, request.email)
 
-            call.respond(LoginResponse(token, UserData(user[Users.id].value, user[Users.email], user[Users.username])))
+            call.respond(HttpStatusCode.OK, LoginResponse(tokenPair.accessToken, UserData(user[Users.id].value, user[Users.email], user[Users.username]), tokenPair.refreshToken))
         }
+
+        post("/refresh") {
+            val request = call.receive<RefreshTokenRequest>()
+
+            val userId = Security.verifyRefreshToken(request.refreshToken)
+
+            if (userId == null) {
+                call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Invalid or expired refresh token"))
+                return@post
+            }
+
+            val user = dbQuery {
+                Users.selectAll()
+                    .where { (Users.id eq userId) and (Users.status eq Status.ACTIVE) }
+                    .singleOrNull()
+            }
+
+            if (user == null) {
+                call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "User not found or inactive"))
+                return@post
+            }
+
+            val tokenPair = Security.generateTokenPair(userId, user[Users.email])
+
+            call.respond(HttpStatusCode.OK, TokenResponse(tokenPair.accessToken, tokenPair.refreshToken))
+        }
+
     }
 }

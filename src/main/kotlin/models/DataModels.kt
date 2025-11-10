@@ -26,9 +26,22 @@ data class LoginRequest(
 
 @Serializable
 data class LoginResponse(
-    val token: String,
-    val user: UserData
+    val accessToken: String,
+    val user: UserData,
+    val refreshToken: String
 )
+
+@Serializable
+data class RefreshTokenRequest(
+    val refreshToken: String
+)
+
+@Serializable
+data class TokenResponse(
+    val accessToken: String,
+    val refreshToken: String
+)
+
 
 // GROUPS
 @Serializable
