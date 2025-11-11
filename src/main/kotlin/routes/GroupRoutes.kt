@@ -57,7 +57,7 @@ fun Route.groupRoutes() {
                     return@post
                 }
 
-                if (validateDescription(request.description)) {
+                if (!validateDescription(request.description)) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
                     return@post
                 }
