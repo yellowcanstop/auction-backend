@@ -52,11 +52,8 @@ import kotlin.text.set
 fun Route.taskRoutes() {
     authenticate("auth-jwt") {
         route("/api/tasks") {
-            get("/view/{groupId}/{taskId}") {
+            get("/view/{groupId}") {
                 val groupId = call.parameters["groupId"]?.toIntOrNull()
-                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
-
-                val taskId = call.parameters["taskId"]?.toIntOrNull()
                     ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
 
                 val userId = call.userId()
