@@ -58,7 +58,7 @@ fun Route.taskRoutes() {
 
                 val userId = call.userId()
 
-                if (notActiveMember(userId, groupId)) {
+                if (notActiveMember(userId, groupId) && !isAdminOfGroup(userId, groupId)) {
                     call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You are not permitted to view tasks in this group"))
                     return@get
                 }

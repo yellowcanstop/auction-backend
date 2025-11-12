@@ -244,7 +244,7 @@ fun Route.groupRoutes() {
 
                 val groupList = groups.map {
                     GroupData(
-                        groupId = it[Memberships.groupId].value,
+                        groupId = it[Groups.id].value,
                         groupName = it[Groups.groupName],
                         description = it[Groups.description]
                     )
