@@ -20,7 +20,7 @@ object DatabaseFactory {
             username = System.getenv("DATABASE_USER")
                 ?: "postgres"
             password = System.getenv("DATABASE_PASSWORD")
-            maximumPoolSize = 10
+            maximumPoolSize = 20
         }
 
         val dataSource = HikariDataSource(config)
