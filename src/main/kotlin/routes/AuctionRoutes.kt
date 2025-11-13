@@ -9,6 +9,7 @@ import com.example.models.BidResponse
 import com.example.models.Bids
 import com.example.models.CreateAuctionRequest
 import com.example.models.CreateAuctionResponse
+import com.example.models.Memberships
 import com.example.models.Status
 import com.example.models.Users
 import com.example.models.ViewAuctionsResponse
@@ -29,6 +30,9 @@ import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.update
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import kotlin.and
+import kotlin.compareTo
+import kotlin.text.get
 
 fun Route.auctionRoutes() {
     authenticate("auth-jwt") {
@@ -49,42 +53,79 @@ fun Route.auctionRoutes() {
 
                 val request = call.receive<CreateAuctionRequest>()
 
+                val nameError = validateRewardName(request.rewardName)
+                if (nameError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to nameError))
+                    return@post
+                }
+
                 val descError = validateDescription(request.description)
                 if (descError != null) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to descError))
                     return@post
                 }
 
+                val imageError = validateRewardImage(request.rewardImage)
+                if (imageError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to imageError))
+                    return@post
+                }
+
+                val minBidError = validateMinimumBid(request.minimumBid)
+                if (minBidError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to minBidError))
+                    return@post
+                }
+
+                val incrementError = validateBidIncrement(request.bidIncrement)
+                if (incrementError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to incrementError))
+                    return@post
+                }
+
                 val startTime = if (request.startNow) {
                     LocalDateTime.now()
                 } else {
-                    request.startTime?.let { LocalDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }
-                        ?: return@post call.respond(
+                    try {
+                        request.startTime?.let { LocalDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }
+                            ?: return@post call.respond(
+                                HttpStatusCode.BadRequest,
+                                mapOf("error" to "Start time required when not starting immediately")
+                            )
+                    } catch (e: Exception) {
+                        return@post call.respond(
                             HttpStatusCode.BadRequest,
-                            mapOf("error" to "Start time required when not starting immediately")
+                            mapOf("error" to "Invalid start time format. Use ISO-8601 format (yyyy-MM-dd'T'HH:mm:ss)")
                         )
+                    }
                 }
 
-                val endTime = LocalDateTime.parse(request.endTime, DateTimeFormatter.ISO_DATE_TIME)
+                val endTime = try {
+                    LocalDateTime.parse(request.endTime, DateTimeFormatter.ISO_DATE_TIME)
+                } catch (e: Exception) {
+                    return@post call.respond(
+                        HttpStatusCode.BadRequest,
+                        mapOf("error" to "Invalid end time format. Use ISO-8601 format (yyyy-MM-dd'T'HH:mm:ss)")
+                    )
+                }
 
-                if (endTime.isBefore(startTime)) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "End time must be after start time"))
+                val timeError = validateAuctionTimes(startTime, endTime, request.startNow)
+                if (timeError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to timeError))
                     return@post
                 }
 
-                // use 1-minute buffer
-                if (!request.startNow && startTime.isBefore(LocalDateTime.now().minusMinutes(1))) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Start time cannot be in the past"))
-                    return@post
-                }
+                val trimmedRewardName = request.rewardName.trim()
+                val trimmedDescription = request.description.trim()
+                val trimmedRewardImage = request.rewardImage?.trim()
 
                 val auctionId = dbQuery {
                     Auctions.insertAndGetId {
                         it[Auctions.groupId] = groupId
                         it[Auctions.creatorId] = userId
-                        it[Auctions.rewardName] = request.rewardName
-                        it[Auctions.description] = request.description
-                        it[Auctions.rewardImage] = request.rewardImage
+                        it[Auctions.rewardName] = trimmedRewardName
+                        it[Auctions.description] = trimmedDescription
+                        it[Auctions.rewardImage] = trimmedRewardImage
                         it[Auctions.startTime] = startTime
                         it[Auctions.endTime] = endTime
                         request.minimumBid?.let { bid -> it[Auctions.minimumBid] = bid }
@@ -224,6 +265,26 @@ fun Route.auctionRoutes() {
 
                 val request = call.receive<BidRequest>()
 
+                val bidError = validateBidAmount(request.bidAmount)
+                if (bidError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to bidError))
+                    return@post
+                }
+
+                val userPoints = getUserPoints(userId, groupId)
+                if (userPoints == null) {
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Membership not found"))
+                    return@post
+                }
+
+                if (request.bidAmount > userPoints) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        mapOf("error" to "Insufficient points. You have $userPoints points but need ${request.bidAmount} points")
+                    )
+                    return@post
+                }
+
                 val bidId = try {
                     dbQuery {
                         val auction = Auctions.select(Auctions.id, Auctions.groupId, Auctions.startTime, Auctions.endTime, Auctions.minimumBid, Auctions.bidIncrement, Auctions.status)
@@ -231,8 +292,12 @@ fun Route.auctionRoutes() {
                             .singleOrNull()
                             ?: throw IllegalStateException("Auction not found")
 
-                        if (auction[Auctions.startTime].isAfter(LocalDateTime.now()) || auction[Auctions.endTime].isBefore(LocalDateTime.now())) {
-                            throw IllegalStateException("Auction is not currently available for bidding")
+                        val now = LocalDateTime.now()
+                        if (auction[Auctions.startTime].isAfter(now)) {
+                            throw IllegalStateException("Auction has not started yet")
+                        }
+                        if (auction[Auctions.endTime].isBefore(now)) {
+                            throw IllegalStateException("Auction has ended")
                         }
 
                         val highestBid = Bids.select(Bids.auctionId, Bids.bidAmount)
@@ -241,12 +306,16 @@ fun Route.auctionRoutes() {
                             .limit(1)
                             .singleOrNull()
 
+                        if (highestBid != null && highestBid[Bids.bidderId].value == userId) {
+                            throw IllegalStateException("You are already the highest bidder")
+                        }
+
                         val minBid = highestBid?.let {
                             highestBid[Bids.bidAmount] + auction[Auctions.bidIncrement]
                         } ?: auction[Auctions.minimumBid]
 
                         if (request.bidAmount < minBid) {
-                            throw IllegalStateException("Bid amount must be at least $minBid")
+                            throw IllegalStateException("Bid amount must be at least $minBid points")
                         }
 
                         val bid = try {
@@ -270,5 +339,84 @@ fun Route.auctionRoutes() {
                 call.respond(HttpStatusCode.OK, BidResponse(bidId))
             }
         }
+    }
+}
+
+private suspend fun getUserPoints(userId: Int, groupId: Int): Int? {
+    return dbQuery {
+        Memberships.select(Memberships.points)
+            .where { (Memberships.userId eq userId) and (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE) }
+            .singleOrNull()
+            ?.get(Memberships.points)
+    }
+}
+
+private fun validateRewardName(name: String): String? {
+    val trimmedName = name.trim()
+    return when {
+        trimmedName.isBlank() -> "Reward name cannot be blank"
+        trimmedName.length < 3 -> "Reward name must be at least 3 characters"
+        trimmedName.length > 100 -> "Reward name cannot exceed 100 characters"
+        else -> null
+    }
+}
+
+private fun validateRewardImage(imageUrl: String?): String? {
+    if (imageUrl == null) return null
+
+    val trimmed = imageUrl.trim()
+    return when {
+        trimmed.isBlank() -> "Image URL cannot be blank if provided"
+        trimmed.length > 500 -> "Image URL cannot exceed 500 characters"
+        !trimmed.startsWith("http://") && !trimmed.startsWith("https://") ->
+            "Image URL must start with http:// or https://"
+        else -> null
+    }
+}
+
+private fun validateAuctionTimes(startTime: LocalDateTime, endTime: LocalDateTime, startNow: Boolean): String? {
+    val now = LocalDateTime.now()
+    val bufferMinutes = 1L
+
+    return when {
+        !startNow && startTime.isBefore(now.minusMinutes(bufferMinutes)) ->
+            "Start time cannot be in the past"
+        endTime.isBefore(startTime) ->
+            "End time must be after start time"
+        endTime.isBefore(now.minusMinutes(bufferMinutes)) ->
+            "End time cannot be in the past"
+        endTime.isAfter(now.plusMonths(1)) ->
+            "End time cannot be more than 1 month in the future"
+        endTime.isBefore(startTime.plusMinutes(5)) ->
+            "Auction must run for at least 5 minutes"
+        else -> null
+    }
+}
+
+private fun validateMinimumBid(minimumBid: Int?): String? {
+    if (minimumBid == null) return null
+
+    return when {
+        minimumBid < 0 -> "Minimum bid cannot be negative"
+        minimumBid > 100000 -> "Minimum bid cannot exceed 100,000 points"
+        else -> null
+    }
+}
+
+private fun validateBidIncrement(bidIncrement: Int?): String? {
+    if (bidIncrement == null) return null
+
+    return when {
+        bidIncrement < 1 -> "Bid increment must be at least 1"
+        bidIncrement > 10000 -> "Bid increment cannot exceed 10,000 points"
+        else -> null
+    }
+}
+
+private fun validateBidAmount(bidAmount: Int): String? {
+    return when {
+        bidAmount < 0 -> "Bid amount cannot be negative"
+        bidAmount > 1000000 -> "Bid amount cannot exceed 1,000,000 points"
+        else -> null
     }
 }
