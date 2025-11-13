@@ -21,13 +21,18 @@ fun Route.authRoutes() {
         post("/register") {
             val request = call.receive<RegisterRequest>()
 
-            if (!request.email.contains("@")) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid email"))
+            val validationError = validateRegistration(request)
+
+            if (validationError != null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to validationError))
                 return@post
             }
 
+            val trimmedEmail = request.email.trim().lowercase()
+            val trimmedUsername = request.username.trim()
+
             val existingUser = dbQuery {
-                Users.select(Users.email).where { Users.email eq request.email }.singleOrNull()
+                Users.select(Users.email).where { Users.email eq trimmedEmail }.singleOrNull()
             }
 
             if (existingUser != null) {
@@ -58,13 +63,11 @@ fun Route.authRoutes() {
 
             val userId = dbQuery {
                 Users.insert {
-                    it[email] = request.email
+                    it[email] = trimmedEmail
                     it[passwordHash] = hashedPassword
-                    it[username] = request.username
+                    it[username] = trimmedUsername
                 }[Users.id].value
             }
-
-            val tokenPair = Security.generateTokenPair(userId, request.email)
 
             call.respond(HttpStatusCode.Created, mapOf("message" to "Successful registration. Please log in to continue."))
         }
@@ -73,8 +76,17 @@ fun Route.authRoutes() {
         post("/login") {
             val request = call.receive<LoginRequest>()
 
+            val validationError = validateLogin(request)
+
+            if (validationError != null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to validationError))
+                return@post
+            }
+
+            val trimmedEmail = request.email.trim().lowercase()
+
             val user = dbQuery {
-                Users.selectAll().where { (Users.email eq request.email) and (Users.status eq Status.ACTIVE) }.singleOrNull()
+                Users.selectAll().where { (Users.email eq trimmedEmail) and (Users.status eq Status.ACTIVE) }.singleOrNull()
             }
 
             if (user == null) {
@@ -113,6 +125,11 @@ fun Route.authRoutes() {
         post("/refresh") {
             val request = call.receive<RefreshTokenRequest>()
 
+            if (request.refreshToken.isBlank()) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Refresh token cannot be blank"))
+                return@post
+            }
+
             val userId = Security.verifyRefreshToken(request.refreshToken)
 
             if (userId == null) {
@@ -136,5 +153,50 @@ fun Route.authRoutes() {
             call.respond(HttpStatusCode.OK, TokenResponse(tokenPair.accessToken, tokenPair.refreshToken))
         }
 
+    }
+}
+
+private fun isValidEmail(email: String): Boolean {
+    val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
+    return email.matches(emailRegex)
+}
+
+private fun isValidPassword(password: String): Boolean {
+    // At least 8 characters, contains uppercase, lowercase, digit, and special character
+    return password.length >= 8 &&
+            password.any { it.isUpperCase() } &&
+            password.any { it.isLowerCase() } &&
+            password.any { it.isDigit() } &&
+            password.any { !it.isLetterOrDigit() }
+}
+
+private fun validateRegistration(request: RegisterRequest): String? {
+    val email = request.email.trim()
+    val username = request.username.trim()
+    val password = request.password
+
+    return when {
+        username.isBlank() -> "Username cannot be blank"
+        username.length < 3 -> "Username must be at least 3 characters"
+        username.length > 50 -> "Username cannot exceed 50 characters"
+        email.isBlank() -> "Email cannot be blank"
+        !isValidEmail(email) -> "Invalid email format"
+        email.length > 255 -> "Email cannot exceed 255 characters"
+        password.isBlank() -> "Password cannot be blank"
+        !isValidPassword(password) -> "Password must be at least 8 characters and contain uppercase, lowercase, digit, and special character"
+        password.length > 128 -> "Password cannot exceed 128 characters"
+        else -> null
+    }
+}
+
+private fun validateLogin(request: LoginRequest): String? {
+    val email = request.email.trim()
+    val password = request.password
+
+    return when {
+        email.isBlank() -> "Email cannot be blank"
+        !isValidEmail(email) -> "Invalid email format"
+        password.isBlank() -> "Password cannot be blank"
+        else -> null
     }
 }
