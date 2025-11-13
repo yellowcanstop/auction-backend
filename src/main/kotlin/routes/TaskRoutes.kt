@@ -102,8 +102,27 @@ fun Route.taskRoutes() {
                     return@post
                 }
 
-                if (request.quantity < 1) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Points must be non-negative and quantity must be at least 1"))
+                val nameError = validateTaskName(request.taskName)
+                if (nameError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to nameError))
+                    return@post
+                }
+
+                val dueDateError = validateDueDate(request.dueDate)
+                if (dueDateError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to dueDateError))
+                    return@post
+                }
+
+                val quantityError = validateQuantity(request.quantity)
+                if (quantityError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to quantityError))
+                    return@post
+                }
+
+                val pointsError = validatePoints(request.points)
+                if (pointsError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to pointsError))
                     return@post
                 }
 
@@ -123,10 +142,6 @@ fun Route.taskRoutes() {
                 var points = request.points
 
                 if (request.points != null) {
-                    if (request.points < 0) {
-                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Points must be non-negative"))
-                        return@post
-                    }
                     if (maxPoints != null && request.points > maxPoints) {
                         call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Task points exceed group maximum of $maxPoints"))
                         return@post
@@ -151,12 +166,15 @@ fun Route.taskRoutes() {
                     }
                 }
 
+                val trimmedTaskName = request.taskName.trim()
+                val trimmedDescription = request.description.trim()
+
                 val taskId = dbQuery {
                     Tasks.insertAndGetId {
                         it[Tasks.groupId] = groupId
                         it[Tasks.creatorId] = userId
-                        it[Tasks.taskName] = request.taskName
-                        it[Tasks.description] = request.description
+                        it[Tasks.taskName] = trimmedTaskName
+                        it[Tasks.description] = trimmedDescription
                         it[Tasks.dueDate] = request.dueDate?.let { date -> LocalDateTime.parse(date, DateTimeFormatter.ISO_DATE_TIME)}
                         it[Tasks.points] = points
                         it[Tasks.quantity] = request.quantity
@@ -167,8 +185,8 @@ fun Route.taskRoutes() {
                 call.respond(HttpStatusCode.Created, CreateTaskResponse(
                     task = TaskData(
                         taskId = taskId.value,
-                        taskName = request.taskName,
-                        description = request.description,
+                        taskName = trimmedTaskName,
+                        description = trimmedDescription,
                         dueDate = request.dueDate,
                         points = points,
                         quantity = request.quantity,
@@ -313,6 +331,23 @@ fun Route.taskRoutes() {
 
                 val request = call.receive<CreateSubmissionRequest>()
 
+                val textError = validateTextContent(request.textContent)
+                if (textError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to textError))
+                    return@post
+                }
+
+                val imageError = validateImageContent(request.imageContent)
+                if (imageError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to imageError))
+                    return@post
+                }
+
+                if (request.coAuthorId == userId) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "You cannot add yourself as co-author"))
+                    return@post
+                }
+
                 try {
                     dbQuery {
                         val claim = Claims.select(Claims.taskId, Claims.claimantId)
@@ -350,8 +385,8 @@ fun Route.taskRoutes() {
                             it[Submissions.claimId] = claimId
                             it[Submissions.authorId] = userId
                             it[Submissions.coAuthorId] = request.coAuthorId
-                            it[Submissions.textContent] = request.textContent
-                            it[Submissions.imageContent] = request.imageContent
+                            it[Submissions.textContent] = request.textContent?.trim()
+                            it[Submissions.imageContent] = request.imageContent?.trim()
                         }
 
                         val autoApprove = Groups.select(Groups.id, Groups.autoApprove, Groups.creatorId)
@@ -384,6 +419,7 @@ fun Route.taskRoutes() {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
                     return@post
                 }
+                call.respond(HttpStatusCode.OK, mapOf("message" to "Submission created successfully"))
             }
 
             get("/claims/{groupId}/{taskId}") {
@@ -555,4 +591,76 @@ suspend fun notActiveMember(userId: Int, groupId: Int): Boolean {
             .singleOrNull()
     }
     return membership == null
+}
+
+private fun validateTaskName(name: String): String? {
+    val trimmedName = name.trim()
+    return when {
+        trimmedName.isBlank() -> "Task name cannot be blank"
+        trimmedName.length < 3 -> "Task name must be at least 3 characters"
+        trimmedName.length > 100 -> "Task name cannot exceed 100 characters"
+        else -> null
+    }
+}
+
+private fun validateDueDate(dueDate: String?): String? {
+    if (dueDate == null) return null
+
+    return try {
+        val parsedDate = LocalDateTime.parse(dueDate, DateTimeFormatter.ISO_DATE_TIME)
+        val now = LocalDateTime.now()
+        val bufferMinutes = 1L // 1-minute buffer
+
+        when {
+            parsedDate.isBefore(now.minusMinutes(bufferMinutes)) ->
+                "Due date cannot be in the past"
+            parsedDate.isAfter(now.plusYears(1)) ->
+                "Due date cannot be more than 1 year in the future"
+            else -> null
+        }
+    } catch (e: Exception) {
+        "Invalid date format. Use ISO-8601 format (yyyy-MM-dd'T'HH:mm:ss)"
+    }
+}
+
+private fun validateQuantity(quantity: Int): String? {
+    return when {
+        quantity < 1 -> "Quantity must be at least 1"
+        quantity > 1000 -> "Quantity cannot exceed 1000"
+        else -> null
+    }
+}
+
+private fun validatePoints(points: Int?): String? {
+    if (points == null) return null
+    return when {
+        points < 0 -> "Points cannot be negative"
+        points > 10000 -> "Points cannot exceed 10000"
+        else -> null
+    }
+}
+
+private fun validateTextContent(content: String?): String? {
+    if (content == null) return null
+
+    val trimmed = content.trim()
+    return when {
+        trimmed.length > 5000 -> "Text content cannot exceed 5000 characters"
+        trimmed.contains("<script>", ignoreCase = true) -> "Text content contains invalid content"
+        trimmed.contains("</script>", ignoreCase = true) -> "Text content contains invalid content"
+        trimmed.contains("javascript:", ignoreCase = true) -> "Text content contains invalid content"
+        else -> null
+    }
+}
+
+private fun validateImageContent(content: String?): String? {
+    if (content == null) return null
+
+    val trimmed = content.trim()
+    return when {
+        trimmed.isBlank() -> "Image content cannot be blank"
+        trimmed.length > 500 -> "Image URL cannot exceed 500 characters"
+        !trimmed.startsWith("http://") && !trimmed.startsWith("https://") -> "Image content must be a valid URL"
+        else -> null
+    }
 }
