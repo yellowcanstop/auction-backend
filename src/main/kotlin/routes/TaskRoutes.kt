@@ -96,8 +96,9 @@ fun Route.taskRoutes() {
 
                 val request = call.receive<CreateTaskRequest>()
 
-                if (!validateDescription(request.description)) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
+                val descError = validateDescription(request.description)
+                if (descError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to descError))
                     return@post
                 }
 

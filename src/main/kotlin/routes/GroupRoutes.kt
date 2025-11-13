@@ -46,19 +46,29 @@ fun Route.groupRoutes() {
 
                 val userId = call.userId()
 
+                val groupNameError = validateGroupName(request.groupName)
+                if (groupNameError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to groupNameError))
+                    return@post
+                }
+
+                val descError = validateDescription(request.description)
+                if (descError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to descError))
+                    return@post
+                }
+
+                val trimmedGroupName = request.groupName.trim()
+                val trimmedDescription = request.description.trim()
+
                 // Same creator cannot have multiple groups with the same name
                 val existingGroups = dbQuery {
-                    Groups.select(Groups.groupName).where { (Groups.creatorId eq userId) and (Groups.groupName eq request.groupName) }
+                    Groups.select(Groups.groupName).where { (Groups.creatorId eq userId) and (Groups.groupName eq trimmedGroupName) }
                         .singleOrNull()
                 }
 
                 if (existingGroups != null) {
                     call.respond(HttpStatusCode.Conflict, mapOf("error" to "You already have a group with this name"))
-                    return@post
-                }
-
-                if (!validateDescription(request.description)) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
                     return@post
                 }
 
@@ -90,8 +100,8 @@ fun Route.groupRoutes() {
                 call.respond(HttpStatusCode.Created,
                     CreateGroupResponse(
                         groupId = groupId.value,
-                        groupName = request.groupName,
-                        description = request.description,
+                        groupName = trimmedGroupName,
+                        description = trimmedDescription,
                         inviteCode = newCode,
                         creatorId = userId
                 ))
@@ -115,8 +125,25 @@ fun Route.groupRoutes() {
                     return@patch
                 }
 
-                if (request.description != null && !validateDescription(request.description)) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
+                if (request.groupName != null) {
+                    val nameError = validateGroupName(request.groupName)
+                    if (nameError != null) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to nameError))
+                        return@patch
+                    }
+                }
+
+                if (request.description != null) {
+                    val descError = validateDescription(request.description)
+                    if (descError != null) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to descError))
+                        return@patch
+                    }
+                }
+
+                val pointsError = validateTaskPoints(request.taskPointsMin, request.taskPointsAverage, request.taskPointsMax)
+                if (pointsError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to pointsError))
                     return@patch
                 }
 
@@ -183,8 +210,16 @@ fun Route.groupRoutes() {
 
                 val request = call.receive<JoinGroupRequest>()
 
+                val codeError = validateInviteCode(request.inviteCode)
+                if (codeError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to codeError))
+                    return@post
+                }
+
+                val trimmedCode = request.inviteCode.trim().uppercase()
+
                 val group = dbQuery {
-                    Groups.select(Groups.id, Groups.groupName, Groups.description, Groups.creatorId).where { Groups.inviteCode eq request.inviteCode }.singleOrNull()
+                    Groups.select(Groups.id, Groups.groupName, Groups.description, Groups.creatorId).where { Groups.inviteCode eq trimmedCode }.singleOrNull()
                 }
 
                 if (group == null) {
@@ -312,12 +347,17 @@ fun Route.groupRoutes() {
     }
 }
 
-fun validateDescription(description: String): Boolean {
-    if (description.length > 1000) return false
-    if (description.contains("<script>", ignoreCase = true)) return false
-    if (description.contains("</script>", ignoreCase = true)) return false
-    if (description.contains("onerror=", ignoreCase = true)) return false
-    return true
+fun validateDescription(description: String): String? {
+    val trimmedDesc = description.trim()
+    return when {
+        trimmedDesc.length > 1000 -> "Description cannot exceed 1000 characters"
+        trimmedDesc.contains("<script>", ignoreCase = true) -> "Description contains invalid content"
+        trimmedDesc.contains("</script>", ignoreCase = true) -> "Description contains invalid content"
+        trimmedDesc.contains("onerror=", ignoreCase = true) -> "Description contains invalid content"
+        trimmedDesc.contains("javascript:", ignoreCase = true) -> "Description contains invalid content"
+        trimmedDesc.contains("onclick=", ignoreCase = true) -> "Description contains invalid content"
+        else -> null
+    }
 }
 
 private suspend fun noGroupFound(groupId: Int) : Boolean {
@@ -344,3 +384,42 @@ fun generateInviteCode(): String {
         .substring(0, 10) // 10-character, as per database schema
         .uppercase()
 }
+
+private fun validateGroupName(name: String): String? {
+    val trimmedName = name.trim()
+    return when {
+        trimmedName.isBlank() -> "Group name cannot be blank"
+        trimmedName.length < 3 -> "Group name must be at least 3 characters"
+        trimmedName.length > 100 -> "Group name cannot exceed 100 characters"
+        else -> null
+    }
+}
+
+private fun validateTaskPoints(min: Int?, avg: Int?, max: Int?): String? {
+    if (min != null && min < 0) return "Minimum points cannot be negative"
+    if (avg != null && avg < 0) return "Average points cannot be negative"
+    if (max != null && max < 0) return "Maximum points cannot be negative"
+
+    if (min != null && avg != null && min > avg) {
+        return "Minimum points cannot be greater than average points"
+    }
+    if (avg != null && max != null && avg > max) {
+        return "Average points cannot be greater than maximum points"
+    }
+    if (min != null && max != null && min > max) {
+        return "Minimum points cannot be greater than maximum points"
+    }
+
+    return null
+}
+
+private fun validateInviteCode(code: String): String? {
+    val trimmedCode = code.trim()
+    return when {
+        trimmedCode.isBlank() -> "Invite code cannot be blank"
+        trimmedCode.length != 10 -> "Invalid invite code format"
+        !trimmedCode.all { it.isLetterOrDigit() } -> "Invalid invite code format"
+        else -> null
+    }
+}
+

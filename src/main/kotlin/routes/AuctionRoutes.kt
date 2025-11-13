@@ -49,8 +49,9 @@ fun Route.auctionRoutes() {
 
                 val request = call.receive<CreateAuctionRequest>()
 
-                if (!validateDescription(request.description)) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
+                val descError = validateDescription(request.description)
+                if (descError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to descError))
                     return@post
                 }
 
