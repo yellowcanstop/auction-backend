@@ -207,6 +207,7 @@ fun Route.auctionRoutes() {
                     (Bids innerJoin Users)
                         .select(Bids.auctionId, Bids.bidderId, Bids.bidAmount, Bids.bidAt, Users.username)
                         .where { (Bids.auctionId eq auctionId) and (Bids.bidderId eq Users.id) }
+                        .orderBy(Bids.bidAmount to SortOrder.DESC, Bids.bidAt to SortOrder.DESC)
                 }
 
                 val bidList = bids.map {
