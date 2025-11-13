@@ -49,7 +49,7 @@ fun Route.auctionRoutes() {
 
                 val request = call.receive<CreateAuctionRequest>()
 
-                if (validateDescription(request.description)) {
+                if (!validateDescription(request.description)) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
                     return@post
                 }

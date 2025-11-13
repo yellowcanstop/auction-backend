@@ -115,7 +115,7 @@ fun Route.groupRoutes() {
                     return@patch
                 }
 
-                if (request.description != null && validateDescription(request.description)) {
+                if (request.description != null && !validateDescription(request.description)) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Description invalid"))
                     return@patch
                 }
