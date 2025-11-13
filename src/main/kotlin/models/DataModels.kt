@@ -212,8 +212,6 @@ data class ReviewData(
 
 @Serializable
 data class GradeSubmissionRequest(
-    val submissionId: Int,
-    val reviewerId: Int,
     val decision: Decision
 )
 
