@@ -5,6 +5,7 @@ import com.example.plugins.configureRouting
 import com.example.plugins.configureSecurity
 import com.example.plugins.configureSerialization
 import com.example.services.AuctionFinalizationService
+import com.example.services.TaskFinalizationService
 import com.example.websocket.configureSockets
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -30,13 +31,15 @@ fun Application.module() {
     configureSerialization()
     configureRouting()
 
-    val serviceScope = CoroutineScope(SupervisorJob())
+    val serviceScope = CoroutineScope(SupervisorJob()) // each service can fail independently w/o cancelling the other
     AuctionFinalizationService.start(serviceScope, checkIntervalSeconds = 60)
+    TaskFinalizationService.start(serviceScope, checkIntervalSeconds = 60)
 
     // subscribe to ktor's predefined events to stop background job when app stops
     monitor.subscribe(ApplicationStopped) { application ->
         application.environment.log.info("Server is stopped")
         AuctionFinalizationService.stop()
+        TaskFinalizationService.stop()
         monitor.unsubscribe(ApplicationStopped) {}
     }
 }
