@@ -2,6 +2,8 @@ package com.example.routes
 
 import com.example.config.DatabaseFactory.dbQuery
 import com.example.models.AuctionData
+import com.example.models.AuctionWinnerData
+import com.example.models.AuctionWinners
 import com.example.models.Auctions
 import com.example.models.BidData
 import com.example.models.BidRequest
@@ -339,6 +341,49 @@ fun Route.auctionRoutes() {
 
                 call.respond(HttpStatusCode.OK, BidResponse(bidId))
             }
+
+            // TODO not yet consumed by android app
+            get("/winner/{groupId}/{auctionId}") {
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
+
+                val auctionId = call.parameters["auctionId"]?.toIntOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid auction ID"))
+
+                val userId = call.userId()
+
+                if (!isAdminOfGroup(userId, groupId) && notActiveMember(userId, groupId)) {
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Not permitted"))
+                    return@get
+                }
+
+                val winner = dbQuery {
+                    (AuctionWinners innerJoin Users)
+                        .select(
+                            AuctionWinners.auctionId,
+                            AuctionWinners.winnerId,
+                            AuctionWinners.winningBid,
+                            AuctionWinners.finalizedAt,
+                            Users.username
+                        )
+                        .where { AuctionWinners.auctionId eq auctionId }
+                        .singleOrNull()
+                }
+
+                if (winner == null) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "No winner found"))
+                } else {
+                    call.respond(HttpStatusCode.OK, AuctionWinnerData(
+                        auctionId = winner[AuctionWinners.auctionId].value,
+                        winnerId = winner[AuctionWinners.winnerId].value,
+                        winnerName = winner[Users.username],
+                        winningBid = winner[AuctionWinners.winningBid],
+                        finalizedAt = winner[AuctionWinners.finalizedAt].format(DateTimeFormatter.ISO_DATE_TIME)
+                    )
+                    )
+                }
+            }
+
         }
     }
 }

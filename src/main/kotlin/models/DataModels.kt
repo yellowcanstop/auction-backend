@@ -272,3 +272,12 @@ data class BidRequest(
 data class BidResponse(
     val bidId: Int
 )
+
+@Serializable
+data class AuctionWinnerData(
+    val auctionId: Int,
+    val winnerId: Int,
+    val winnerName: String,
+    val winningBid: Int,
+    val finalizedAt: String
+)

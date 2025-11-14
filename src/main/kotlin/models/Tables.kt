@@ -14,6 +14,7 @@ object Users : IntIdTable("users") {
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
     val status = enumeration("status", Status::class ).default(Status.ACTIVE)
 }
+// val fcmToken = varchar("fcm_token", 255).nullable() // check length
 
 object Groups : IntIdTable("groups") {
     val groupName = varchar("group_name", 255)
@@ -108,4 +109,12 @@ object Bids : IntIdTable("bids") {
         index(false, auctionId, bidAmount) // speed up highest bid lookup
         index(false, bidderId, bidAt) // speed up user bid history lookup
     }
+}
+
+object AuctionWinners : IntIdTable("auction_winners") {
+    val auctionId = reference("auction_id", Auctions).uniqueIndex()
+    val winnerId = reference("winner_id", Users)
+    val winningBid = integer("winning_bid")
+    val finalizedAt = datetime("finalized_at").clientDefault { LocalDateTime.now() }
+    val notified = bool("notified").default(false)
 }
