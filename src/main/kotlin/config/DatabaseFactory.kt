@@ -28,7 +28,7 @@ object DatabaseFactory {
 
         transaction {
             SchemaUtils.create(
-                Users, Groups, Memberships, Tasks, Claims, Submissions, Reviews, Auctions, Bids
+                Users, Groups, Memberships, Tasks, Claims, Submissions, Reviews, Auctions, Bids, AuctionWinners
             )
         }
     }
