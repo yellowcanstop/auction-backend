@@ -66,21 +66,20 @@ fun Route.taskRoutes() {
                 val tasks = dbQuery {
                     Tasks.select(Tasks.id, Tasks.taskName, Tasks.description, Tasks.status, Tasks.dueDate, Tasks.points, Tasks.quantity, Tasks.requireProof)
                         .where { (Tasks.groupId eq groupId) and (Tasks.status eq Status.ACTIVE) and (Tasks.quantity neq 0)}
+                        .map {
+                            TaskData(
+                                taskId = it[Tasks.id].value,
+                                taskName = it[Tasks.taskName],
+                                description = it[Tasks.description],
+                                dueDate = it[Tasks.dueDate]?.toString(),
+                                points = it[Tasks.points],
+                                quantity = it[Tasks.quantity],
+                                requireProof = it[Tasks.requireProof]
+                            )
+                        }
                 }
 
-                val taskList = tasks.map {
-                    TaskData(
-                        taskId = it[Tasks.id].value,
-                        taskName = it[Tasks.taskName],
-                        description = it[Tasks.description],
-                        dueDate = it[Tasks.dueDate]?.toString(),
-                        points = it[Tasks.points],
-                        quantity = it[Tasks.quantity],
-                        requireProof = it[Tasks.requireProof]
-                    )
-                }
-
-                call.respond(HttpStatusCode.OK, ViewTaskResponse(taskList))
+                call.respond(HttpStatusCode.OK, ViewTaskResponse(tasks))
             }
 
             post("/create/{groupId}") {

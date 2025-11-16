@@ -164,22 +164,21 @@ fun Route.auctionRoutes() {
                         Auctions.bidIncrement
                     )
                         .where { (Auctions.groupId eq groupId) and (Auctions.status eq Status.ACTIVE) }
+                        .map {
+                            AuctionData(
+                                auctionId = it[Auctions.id].value,
+                                rewardName = it[Auctions.rewardName],
+                                description = it[Auctions.description],
+                                rewardImage = it[Auctions.rewardImage],
+                                startTime = it[Auctions.startTime].format(DateTimeFormatter.ISO_DATE_TIME),
+                                endTime = it[Auctions.endTime].format(DateTimeFormatter.ISO_DATE_TIME),
+                                minimumBid = it[Auctions.minimumBid],
+                                bidIncrement = it[Auctions.bidIncrement]
+                            )
+                        }
                 }
 
-                val auctionList = auctions.map {
-                    AuctionData(
-                        auctionId = it[Auctions.id].value,
-                        rewardName = it[Auctions.rewardName],
-                        description = it[Auctions.description],
-                        rewardImage = it[Auctions.rewardImage],
-                        startTime = it[Auctions.startTime].format(DateTimeFormatter.ISO_DATE_TIME),
-                        endTime = it[Auctions.endTime].format(DateTimeFormatter.ISO_DATE_TIME),
-                        minimumBid = it[Auctions.minimumBid],
-                        bidIncrement = it[Auctions.bidIncrement]
-                    )
-                }
-
-                call.respond(HttpStatusCode.OK, ViewAuctionsResponse(auctionList))
+                call.respond(HttpStatusCode.OK, ViewAuctionsResponse(auctions))
             }
 
             get("/view/{groupId}/{auctionId}") {
@@ -210,18 +209,17 @@ fun Route.auctionRoutes() {
                         .select(Bids.auctionId, Bids.bidderId, Bids.bidAmount, Bids.bidAt, Users.username)
                         .where { (Bids.auctionId eq auctionId) and (Bids.bidderId eq Users.id) }
                         .orderBy(Bids.bidAmount to SortOrder.DESC, Bids.bidAt to SortOrder.DESC)
+                        .map {
+                            BidData(
+                                bidderId = it[Bids.bidderId].value,
+                                bidderName = it[Users.username],
+                                bidAmount = it[Bids.bidAmount],
+                                bidAt = it[Bids.bidAt].format(DateTimeFormatter.ISO_DATE_TIME)
+                            )
+                        }
                 }
 
-                val bidList = bids.map {
-                    BidData(
-                        bidderId = it[Bids.bidderId].value,
-                        bidderName = it[Users.username],
-                        bidAmount = it[Bids.bidAmount],
-                        bidAt = it[Bids.bidAt].format(DateTimeFormatter.ISO_DATE_TIME)
-                    )
-                }
-
-                call.respond(HttpStatusCode.OK, ViewBidsResponse(bidList))
+                call.respond(HttpStatusCode.OK, ViewBidsResponse(bids))
             }
 
             post("/delete/{groupId}/{auctionId}") {

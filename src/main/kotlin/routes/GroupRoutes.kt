@@ -35,6 +35,7 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
+import kotlin.text.get
 import kotlin.text.set
 
 
@@ -256,17 +257,16 @@ fun Route.groupRoutes() {
                     (Memberships innerJoin Groups)
                         .select(Memberships.groupId, Groups.groupName, Groups.description)
                         .where { (Memberships.userId eq userId) and (Memberships.status eq Status.ACTIVE) and (Groups.status eq Status.ACTIVE) }
+                        .map {
+                            GroupData(
+                                groupId = it[Memberships.groupId].value,
+                                groupName = it[Groups.groupName],
+                                description = it[Groups.description]
+                            )
+                        }
                 }
 
-                val groupList = groups.map {
-                    GroupData(
-                        groupId = it[Memberships.groupId].value,
-                        groupName = it[Groups.groupName],
-                        description = it[Groups.description]
-                    )
-                }
-
-                call.respond(HttpStatusCode.OK, ViewGroupsResponse(groupList))
+                call.respond(HttpStatusCode.OK, ViewGroupsResponse(groups))
             }
 
             get("/admin") {
@@ -275,17 +275,16 @@ fun Route.groupRoutes() {
                 val groups = dbQuery {
                     Groups.select(Groups.id, Groups.groupName, Groups.description)
                         .where { (Groups.creatorId eq userId) and (Groups.status eq Status.ACTIVE) }
+                        .map {
+                            GroupData(
+                                groupId = it[Groups.id].value,
+                                groupName = it[Groups.groupName],
+                                description = it[Groups.description]
+                            )
+                        }
                 }
 
-                val groupList = groups.map {
-                    GroupData(
-                        groupId = it[Groups.id].value,
-                        groupName = it[Groups.groupName],
-                        description = it[Groups.description]
-                    )
-                }
-
-                call.respond(HttpStatusCode.OK, ViewGroupsResponse(groupList))
+                call.respond(HttpStatusCode.OK, ViewGroupsResponse(groups))
 
             }
 
