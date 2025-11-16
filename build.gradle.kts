@@ -11,6 +11,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization") version "2.2.20"
 }
 
+kotlin {
+    jvmToolchain(17)
+}
+
 group = "com.example"
 version = "0.0.1"
 
