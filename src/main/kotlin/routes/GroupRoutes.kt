@@ -182,9 +182,7 @@ fun Route.groupRoutes() {
                     return@get
                 }
 
-                val request = call.receive<ViewMembersRequest>()
-
-                if (noGroupFound(request.groupId)) {
+                if (noGroupFound(groupId)) {
                     call.respond(HttpStatusCode.NotFound, mapOf("error" to "Group not found"))
                     return@get
                 }
@@ -192,7 +190,7 @@ fun Route.groupRoutes() {
                 val existingMembers = dbQuery {
                     (Memberships innerJoin Users)
                         .select(Memberships.userId, Memberships.points, Users.username)
-                        .where { (Memberships.groupId eq request.groupId) and (Memberships.status eq Status.ACTIVE)}
+                        .where { (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE)}
                 }
 
                 val membersList = existingMembers.map {

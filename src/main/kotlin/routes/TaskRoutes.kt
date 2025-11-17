@@ -223,7 +223,7 @@ fun Route.taskRoutes() {
                     Tasks.update({ Tasks.id eq taskId }) {
                         it[status] = Status.INACTIVE
                     }
-                    Claims.update( { (Claims.taskId eq taskId) and (Claims.releasedAt neq null) }) {
+                    Claims.update( { (Claims.taskId eq taskId) and (Claims.releasedAt eq null) }) {
                         it[releasedAt] = LocalDateTime.now()
                     }
                     Submissions.update( { Submissions.taskId eq taskId }) {
@@ -250,7 +250,7 @@ fun Route.taskRoutes() {
 
                 val existingClaim = dbQuery {
                     Claims.select(Claims.id)
-                        .where { (Claims.taskId eq taskId) and (Claims.claimantId eq userId) and (Claims.releasedAt neq null) }
+                        .where { (Claims.taskId eq taskId) and (Claims.claimantId eq userId) and (Claims.releasedAt eq null) }
                         .singleOrNull()
                 }
 
@@ -299,7 +299,7 @@ fun Route.taskRoutes() {
                 try {
                     dbQuery {
                         val claim = Claims.select(Claims.taskId)
-                            .where { (Claims.id eq claimId) and (Claims.claimantId eq userId) and (Claims.releasedAt neq null) }
+                            .where { (Claims.id eq claimId) and (Claims.claimantId eq userId) and (Claims.releasedAt eq null) }
                             .singleOrNull()
                             ?: throw IllegalStateException("You do not have an active claim.")
 
@@ -350,7 +350,7 @@ fun Route.taskRoutes() {
                 try {
                     dbQuery {
                         val claim = Claims.select(Claims.taskId, Claims.claimantId)
-                                .where { (Claims.id eq claimId) and (Claims.claimantId eq userId) and (Claims.releasedAt neq null) }
+                                .where { (Claims.id eq claimId) and (Claims.claimantId eq userId) and (Claims.releasedAt eq null) }
                                 .singleOrNull()
                                 ?: throw IllegalStateException("You do not have an active claim.")
 
@@ -381,6 +381,7 @@ fun Route.taskRoutes() {
                         }
 
                         val subId = Submissions.insertAndGetId {
+                            it[Submissions.taskId] = claim[Claims.taskId]
                             it[Submissions.claimId] = claimId
                             it[Submissions.authorId] = userId
                             it[Submissions.coAuthorId] = request.coAuthorId
@@ -449,7 +450,7 @@ fun Route.taskRoutes() {
                 val claims = dbQuery {
                     (Claims innerJoin Users)
                         .select(Claims.id, Claims.claimantId, Users.username)
-                        .where { (Claims.taskId eq taskId) and (Claims.releasedAt neq null) and (Claims.claimantId eq Users.id) }
+                        .where { (Claims.taskId eq taskId) and (Claims.releasedAt eq null) and (Claims.claimantId eq Users.id) }
                 }
 
                 val claimIds = claims.map { it[Claims.id].value }
