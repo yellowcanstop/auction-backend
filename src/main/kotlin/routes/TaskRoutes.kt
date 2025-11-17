@@ -451,6 +451,7 @@ fun Route.taskRoutes() {
                     (Claims innerJoin Users)
                         .select(Claims.id, Claims.claimantId, Users.username)
                         .where { (Claims.taskId eq taskId) and (Claims.releasedAt eq null) and (Claims.claimantId eq Users.id) }
+                        .toList()
                 }
 
                 val claimIds = claims.map { it[Claims.id].value }
@@ -466,6 +467,7 @@ fun Route.taskRoutes() {
                 val submissions = dbQuery {
                     Submissions.select(Submissions.id, Submissions.claimId, Submissions.authorId, Submissions.coAuthorId, Submissions.submittedAt, Submissions.textContent, Submissions.imageContent)
                         .where { (Submissions.claimId inList claimIds) and (Submissions.status eq Status.ACTIVE) }
+                        .toList()
                     }.groupBy { it[Submissions.claimId].value }
 
                 // fetch co-author names
@@ -474,6 +476,7 @@ fun Route.taskRoutes() {
                     dbQuery {
                         Users.select(Users.id, Users.username)
                             .where { Users.id inList coAuthorIds }
+                            .toList()
                     }.associate { it[Users.id].value to it[Users.username] }
                 } else emptyMap()
 
@@ -481,6 +484,7 @@ fun Route.taskRoutes() {
                 val reviews = dbQuery {
                     Reviews.select(Reviews.id, Reviews.claimId, Reviews.submissionId, Reviews.reviewedAt, Reviews.decision)
                             .where { Reviews.claimId inList claimIds }
+                        .toList()
                     }.groupBy { it[Reviews.claimId].value }
 
                 // build list of ClaimData
