@@ -42,12 +42,21 @@ data class TokenResponse(
     val refreshToken: String
 )
 
+@Serializable
+data class FCMTokenRequest(
+    val fcmToken: String
+)
 
 // GROUPS
 @Serializable
 data class MemberData(
     val userId: Int,
     val username: String,
+    val points: Int
+)
+
+@Serializable
+data class PointResponse(
     val points: Int
 )
 

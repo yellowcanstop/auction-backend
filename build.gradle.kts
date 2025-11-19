@@ -49,6 +49,12 @@ dependencies {
     implementation("com.zaxxer:HikariCP:7.0.2")
     implementation("io.ktor:ktor-server-auth-jwt:3.3.0")
     implementation("org.bouncycastle:bcprov-jdk18on:1.82")
+    implementation("com.google.firebase:firebase-admin:9.7.0")
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
+
+    // http client for fcm
+    //implementation("io.ktor:ktor-client-core")
+    //implementation("io.ktor:ktor-client-cio")
+    //implementation("io.ktor:ktor-client-content-negotiation")
 }

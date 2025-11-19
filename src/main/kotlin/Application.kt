@@ -1,6 +1,7 @@
 package com.example
 
 import com.example.config.DatabaseFactory
+import com.example.config.FirebaseConfig
 import com.example.plugins.configureRouting
 import com.example.plugins.configureSecurity
 import com.example.plugins.configureSerialization
@@ -25,7 +26,7 @@ fun main(args: Array<String>) {
 
 fun Application.module() {
     // val config = environment.config
-
+    FirebaseConfig.initialize()
     DatabaseFactory.init()
     configureSecurity()
     configureSerialization()

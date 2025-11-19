@@ -5,12 +5,14 @@ import com.example.models.CreateGroupRequest
 import com.example.models.CreateGroupResponse
 import com.example.models.EditGroupRequest
 import com.example.models.EditGroupResponse
+import com.example.models.FCMTokenRequest
 import com.example.models.GroupData
 import com.example.models.Groups
 import com.example.models.JoinGroupRequest
 import com.example.models.JoinGroupResponse
 import com.example.models.MemberData
 import com.example.models.Memberships
+import com.example.models.PointResponse
 import com.example.models.Status
 import com.example.models.Users
 import com.example.models.ViewGroupsResponse
@@ -42,6 +44,24 @@ import kotlin.text.set
 fun Route.groupRoutes() {
     authenticate("auth-jwt") {
         route("/api/groups") {
+            post("/fcm") {
+                val userId = call.userId()
+                val request = call.receive<FCMTokenRequest>()
+
+                if (request.fcmToken.isBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "FCM token cannot be blank"))
+                    return@post
+                }
+
+                dbQuery {
+                    Users.update({ Users.id eq userId }) {
+                        it[fcmToken] = request.fcmToken.trim()
+                    }
+                }
+
+                call.respond(HttpStatusCode.OK, mapOf("message" to "FCM token updated"))
+            }
+
             post("/create") {
                 val request = call.receive<CreateGroupRequest>()
 
@@ -339,6 +359,26 @@ fun Route.groupRoutes() {
                 }
 
                 call.respond(HttpStatusCode.OK, mapOf("message" to "Successfully removed member from the group"))
+            }
+
+            get("member/points/{groupId}") {
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
+
+                val userId = call.userId()
+
+                val points = dbQuery {
+                    Memberships.select(Memberships.points)
+                        .where { (Memberships.userId eq userId) and (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE) }
+                        .singleOrNull()
+                }
+
+                if (points == null) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "You are not an active member of this group"))
+                    return@get
+                }
+
+                call.respond(HttpStatusCode.OK, PointResponse(points[Memberships.points]))
             }
         }
     }

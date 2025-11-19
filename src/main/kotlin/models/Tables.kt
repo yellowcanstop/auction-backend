@@ -13,8 +13,10 @@ object Users : IntIdTable("users") {
     val passwordHash = varchar("password_hash", 255)
     val createdAt = datetime("created_at").clientDefault { LocalDateTime.now() }
     val status = enumeration("status", Status::class ).default(Status.ACTIVE)
+    val fcmToken = varchar("fcm_token", 4096).nullable()
+    // fcm token length seems to be currently 163 chars, but this format may change in the future
+    // we allow 4096 (max size of a cookie) just to be safe
 }
-// val fcmToken = varchar("fcm_token", 255).nullable() // check length
 
 object Groups : IntIdTable("groups") {
     val groupName = varchar("group_name", 255)

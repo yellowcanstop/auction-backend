@@ -23,6 +23,8 @@ import com.example.models.Users
 import com.example.models.ViewClaimsResponse
 import com.example.models.ViewTaskResponse
 import com.example.plugins.userId
+import com.example.services.NotificationService.notifySubmissionAccepted
+import com.example.services.NotificationService.notifySubmissionRejected
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
@@ -303,7 +305,7 @@ fun Route.taskRoutes() {
                             .singleOrNull()
                             ?: throw IllegalStateException("You do not have an active claim.")
 
-                        Claims.update({ Claims.id eq claimId }) {
+                        Claims.update({ (Claims.id eq claimId) and (Claims.releasedAt eq null) }) {
                             it[releasedAt] = LocalDateTime.now()
                         }
 
@@ -396,22 +398,44 @@ fun Route.taskRoutes() {
                         if (autoApprove?.get(Groups.autoApprove) == true) {
                             Reviews.insert {
                                 it[Reviews.claimId] = claimId
-                                it[Reviews.submissionId] = subId
+                                it[Reviews.submissionId] = subId.value
                                 it[Reviews.reviewerId] = autoApprove[Groups.creatorId]
                                 it[Reviews.decision] = Decision.ACCEPT
                             }
+                            Claims.update({ (Claims.id eq claimId) and (Claims.releasedAt eq null) }) {
+                                it[releasedAt] = LocalDateTime.now()
+                            }
+                            val taskPoints = task[Tasks.points]
+                            val authorPoints = Memberships.select(Memberships.points)
+                                .where { (Memberships.userId eq userId) and (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE)}
+                                .single()[Memberships.points]
+
                             if (request.coAuthorId == null) {
-                                Memberships.update({ (Memberships.id eq userId) and (Memberships.groupId eq groupId) }) {
-                                    it[points] = points + task[Tasks.points]
+                                Memberships.update({ (Memberships.userId eq userId) and (Memberships.groupId eq groupId) }) {
+                                    it[points] = points + taskPoints
                                 }
+                                val updatedAuthorPoints = authorPoints + taskPoints
+                                notifySubmissionAccepted(userId, groupId, subId.value, updatedAuthorPoints, taskPoints)
+
                             } else {
-                                val splitPoints = task[Tasks.points] / 2
-                                Memberships.update({ (Memberships.id eq userId) and (Memberships.groupId eq groupId) }) {
+                                val coAuthorPoints = Memberships.select(Memberships.points)
+                                    .where { (Memberships.userId eq request.coAuthorId) and (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE)}
+                                    .single()[Memberships.points]
+
+                                val splitPoints = taskPoints / 2
+                                Memberships.update({ (Memberships.userId eq userId) and (Memberships.groupId eq groupId) }) {
                                     it[points] = points + splitPoints
                                 }
-                                Memberships.update({ (Memberships.id eq request.coAuthorId) and (Memberships.groupId eq groupId) }) {
+                                Memberships.update({ (Memberships.userId eq request.coAuthorId) and (Memberships.groupId eq groupId) }) {
                                     it[points] = points + splitPoints
                                 }
+
+                                val updatedAuthorPoints = authorPoints + splitPoints
+                                notifySubmissionAccepted(userId, groupId, subId.value, updatedAuthorPoints, splitPoints)
+
+                                val updatedCoAuthorPoints = coAuthorPoints + splitPoints
+                                notifySubmissionAccepted(request.coAuthorId, groupId, subId.value, updatedCoAuthorPoints, splitPoints)
+
                             }
                         }
                     }
@@ -557,16 +581,40 @@ fun Route.taskRoutes() {
                             it[Reviews.decision] = request.decision
                         }
 
+                        Claims.update({ (Claims.id eq submission[Submissions.claimId]) and (Claims.releasedAt eq null) }) {
+                            it[releasedAt] = LocalDateTime.now()
+                        }
+
+                        val authorId = submission[Submissions.authorId].value
+                        val coAuthorId = submission[Submissions.coAuthorId]?.value
+
+                        if (request.decision == Decision.REJECT) {
+                            notifySubmissionRejected(authorId, groupId, submissionId)
+                            if (coAuthorId != null) {
+                                notifySubmissionRejected(coAuthorId, groupId, submissionId)
+                            }
+                        }
+
                         if (request.decision == Decision.ACCEPT) {
                             val taskPoints = submission[Tasks.points]
-                            val authorId = submission[Submissions.authorId].value
-                            val coAuthorId = submission[Submissions.coAuthorId]?.value
+
+                            val authorPoints = Memberships.select(Memberships.points)
+                                .where { (Memberships.userId eq authorId) and (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE)}
+                                .single()[Memberships.points]
 
                             if (coAuthorId == null) {
-                                Memberships.update({ (Memberships.userId eq authorId) and (Memberships.groupId eq groupId) }) {
+                                Memberships.update({ (Memberships.userId eq authorId) and (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE) }) {
                                     it[points] = points + taskPoints
                                 }
+
+                                val updatedAuthorPoints = authorPoints + taskPoints
+                                notifySubmissionAccepted(authorId, groupId, submissionId, updatedAuthorPoints, taskPoints)
+
                             } else {
+                                val coAuthorPoints = Memberships.select(Memberships.points)
+                                    .where { (Memberships.userId eq coAuthorId) and (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE)}
+                                    .single()[Memberships.points]
+
                                 val splitPoints = taskPoints / 2
                                 Memberships.update({ (Memberships.userId eq authorId) and (Memberships.groupId eq groupId) }) {
                                     it[points] = points + splitPoints
@@ -574,6 +622,13 @@ fun Route.taskRoutes() {
                                 Memberships.update({ (Memberships.userId eq coAuthorId) and (Memberships.groupId eq groupId) }) {
                                     it[points] = points + splitPoints
                                 }
+
+                                val updatedAuthorPoints = authorPoints + splitPoints
+                                notifySubmissionAccepted(authorId, groupId, submissionId, updatedAuthorPoints, splitPoints)
+
+                                val updatedCoAuthorPoints = coAuthorPoints + splitPoints
+                                notifySubmissionAccepted(coAuthorId, groupId, submissionId, updatedCoAuthorPoints, splitPoints)
+
                             }
                         }
                     }
