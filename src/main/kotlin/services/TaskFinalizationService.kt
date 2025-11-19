@@ -2,6 +2,7 @@ package com.example.services
 
 import com.example.config.DatabaseFactory.dbQuery
 import com.example.models.*
+import com.example.services.NotificationService.notifyOverdueTasks
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
@@ -48,16 +49,13 @@ object TaskFinalizationService {
             // a task can have multiple claims (depends on task.quantity set)
             // claim-to-submission is one-to-one
             // a claim without a submission is considered overdue
-            // provided that the claim is not released, and claimant is still active
-            val overdueClaims = (Claims leftJoin Submissions leftJoin Memberships)
+            // provided that the claim is not released
+            val overdueClaims = (Claims leftJoin Submissions)
                 .select(Claims.id, Claims.claimantId)
                 .where {
                     (Claims.taskId eq taskId) and
                             (Claims.releasedAt.isNull()) and
-                            (Submissions.id.isNull()) and
-                            (Memberships.userId eq Claims.claimantId) and
-                            (Memberships.groupId eq groupId) and
-                            (Memberships.status eq Status.ACTIVE)
+                            (Submissions.id.isNull())
                 }
                 .toList()
 
@@ -70,6 +68,9 @@ object TaskFinalizationService {
                 }
                 // TODO remove print statements
                 println("Task $taskId: Released ${overdueClaims.size} overdue claim(s)")
+
+                val claimants = overdueClaims.map { it[Claims.claimantId].value }.distinct()
+                notifyOverdueTasks(claimants)
             }
 
             Tasks.update({ Tasks.id eq taskId }) {

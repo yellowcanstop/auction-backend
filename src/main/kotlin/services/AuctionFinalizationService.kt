@@ -2,6 +2,7 @@ package com.example.services
 
 import com.example.config.DatabaseFactory.dbQuery
 import com.example.models.*
+import com.example.services.NotificationService.notifyAuctionWon
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.minus
@@ -53,6 +54,26 @@ object AuctionFinalizationService {
 
             if (alreadyWon != null) return@dbQuery
 
+            val bids = Bids
+                .join(Users, JoinType.INNER, onColumn = Bids.bidderId, otherColumn = Users.id)
+                .join(Memberships, JoinType.INNER, onColumn = Memberships.userId, otherColumn = Users.id)
+                .select(
+                    Bids.bidderId,
+                    Bids.bidAmount,
+                    Memberships.points,
+                    Users.username
+                )
+                .where {
+                    (Bids.auctionId eq auctionId) and
+                            (Bids.bidderId eq Memberships.userId) and
+                            (Memberships.groupId eq groupId) and
+                            (Memberships.status eq Status.ACTIVE) and
+                            (Bids.bidderId eq Users.id)
+                }
+                .orderBy(Bids.bidAmount to SortOrder.DESC, Bids.bidAt to SortOrder.ASC)
+                .toList()
+
+            /*
             val bids = (Bids innerJoin Memberships innerJoin Users)
                 .select(
                     Bids.bidderId,
@@ -69,6 +90,7 @@ object AuctionFinalizationService {
                 }
                 .orderBy(Bids.bidAmount to SortOrder.DESC, Bids.bidAt to SortOrder.ASC)
                 .toList()
+                */
 
             // move to next highest if top bidder does not have enough points
             val winner = bids.firstOrNull { bid ->
@@ -93,6 +115,8 @@ object AuctionFinalizationService {
                 }
                 // TODO to remove print statements
                 println("Auction $auctionId won by ${winner[Users.username]} with bid $winningBid")
+
+                notifyAuctionWon(winnerId, groupId, auctionId, winningBid)
             } else {
                 println("Auction $auctionId ended with no valid winner (insufficient points)")
             }

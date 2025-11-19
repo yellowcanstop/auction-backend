@@ -210,7 +210,7 @@ fun Route.groupRoutes() {
                 val existingMembers = dbQuery {
                     (Memberships innerJoin Users)
                         .select(Memberships.userId, Memberships.points, Users.username)
-                        .where { (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE)}
+                        .where { (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE) and (Memberships.userId eq Users.id)}
                 }
 
                 val membersList = existingMembers.map {

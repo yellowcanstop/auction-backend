@@ -301,7 +301,7 @@ fun Route.auctionRoutes() {
                             throw IllegalStateException("Auction has ended")
                         }
 
-                        val highestBid = Bids.select(Bids.auctionId, Bids.bidAmount)
+                        val highestBid = Bids.select(Bids.auctionId, Bids.bidAmount, Bids.bidderId)
                             .where { Bids.auctionId eq auctionId }
                             .orderBy(Bids.bidAmount to SortOrder.DESC)
                             .limit(1)
