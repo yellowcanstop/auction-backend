@@ -211,17 +211,16 @@ fun Route.groupRoutes() {
                     (Memberships innerJoin Users)
                         .select(Memberships.userId, Memberships.points, Users.username)
                         .where { (Memberships.groupId eq groupId) and (Memberships.status eq Status.ACTIVE) and (Memberships.userId eq Users.id)}
+                        .map {
+                            MemberData(
+                                userId = it[Memberships.userId].value,
+                                username = it[Users.username],
+                                points = it[Memberships.points]
+                            )
+                        }
                 }
 
-                val membersList = existingMembers.map {
-                    MemberData(
-                        userId = it[Memberships.userId].value,
-                        username = it[Users.username],
-                        points = it[Memberships.points]
-                    )
-                }
-
-                call.respond(HttpStatusCode.OK, ViewMembersResponse(membersList))
+                call.respond(HttpStatusCode.OK, ViewMembersResponse(existingMembers))
             }
 
             post("/join/{inviteCode}") {
