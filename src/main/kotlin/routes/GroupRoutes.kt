@@ -272,7 +272,7 @@ fun Route.groupRoutes() {
 
                 val groups = dbQuery {
                     (Memberships innerJoin Groups)
-                        .select(Memberships.groupId, Groups.groupName, Groups.description)
+                        .select(Memberships.groupId, Groups.groupName, Groups.description, Groups.inviteCode, Groups.creatorId)
                         .where { (Memberships.userId eq userId) and (Memberships.status eq Status.ACTIVE) and (Groups.status eq Status.ACTIVE) }
                         .map {
                             GroupData(
@@ -292,7 +292,7 @@ fun Route.groupRoutes() {
                 val userId = call.userId()
 
                 val groups = dbQuery {
-                    Groups.select(Groups.id, Groups.groupName, Groups.description)
+                    Groups.select(Groups.id, Groups.groupName, Groups.description, Groups.inviteCode, Groups.creatorId)
                         .where { (Groups.creatorId eq userId) and (Groups.status eq Status.ACTIVE) }
                         .map {
                             GroupData(
