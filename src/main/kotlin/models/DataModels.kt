@@ -125,7 +125,9 @@ data class JoinGroupResponse(
 data class GroupData(
     val groupId: Int,
     val groupName: String,
-    val description: String
+    val description: String,
+    val inviteCode: String,
+    val creatorId: Int
 )
 
 @Serializable

@@ -278,7 +278,9 @@ fun Route.groupRoutes() {
                             GroupData(
                                 groupId = it[Memberships.groupId].value,
                                 groupName = it[Groups.groupName],
-                                description = it[Groups.description]
+                                description = it[Groups.description],
+                                inviteCode = it[Groups.inviteCode],
+                                creatorId = it[Groups.creatorId].value
                             )
                         }
                 }
@@ -296,7 +298,9 @@ fun Route.groupRoutes() {
                             GroupData(
                                 groupId = it[Groups.id].value,
                                 groupName = it[Groups.groupName],
-                                description = it[Groups.description]
+                                description = it[Groups.description],
+                                inviteCode = it[Groups.inviteCode],
+                                creatorId = it[Groups.creatorId].value
                             )
                         }
                 }
