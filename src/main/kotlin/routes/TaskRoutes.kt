@@ -639,6 +639,37 @@ fun Route.taskRoutes() {
 
                 call.respond(HttpStatusCode.OK, mapOf("message" to "Submission graded successfully"))
             }
+
+            get("/mytasks/{groupId}") {
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
+
+                val userId = call.userId()
+
+                if (notActiveMember(userId, groupId)) {
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You are not permitted to view claims in this group"))
+                    return@get
+                }
+
+                val tasks = dbQuery {
+                    (Claims innerJoin Tasks)
+                        .select(Tasks.id, Tasks.taskName, Tasks.description, Tasks.dueDate, Tasks.points, Tasks.quantity, Tasks.requireProof)
+                        .where { (Claims.taskId eq Tasks.id) and (Claims.releasedAt eq null) and (Claims.claimantId eq userId) }
+                        .map {
+                            TaskData(
+                                taskId = it[Tasks.id].value,
+                                taskName = it[Tasks.taskName],
+                                description = it[Tasks.description],
+                                dueDate = it[Tasks.dueDate]?.toString(),
+                                points = it[Tasks.points],
+                                quantity = it[Tasks.quantity],
+                                requireProof = it[Tasks.requireProof]
+                            )
+                        }
+                }
+
+                call.respond(HttpStatusCode.OK, ViewTaskResponse(tasks))
+            }
         }
     }
 }
