@@ -31,6 +31,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.update
 import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.and
 import kotlin.compareTo
@@ -89,7 +90,9 @@ fun Route.auctionRoutes() {
                     LocalDateTime.now()
                 } else {
                     try {
-                        request.startTime?.let { LocalDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }
+                        request.startTime?.let {
+                            OffsetDateTime.parse(it, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                .toLocalDateTime()}
                             ?: return@post call.respond(
                                 HttpStatusCode.BadRequest,
                                 mapOf("error" to "Start time required when not starting immediately")
@@ -103,7 +106,8 @@ fun Route.auctionRoutes() {
                 }
 
                 val endTime = try {
-                    LocalDateTime.parse(request.endTime, DateTimeFormatter.ISO_DATE_TIME)
+                    OffsetDateTime.parse(request.endTime, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                        .toLocalDateTime()
                 } catch (e: Exception) {
                     return@post call.respond(
                         HttpStatusCode.BadRequest,

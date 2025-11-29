@@ -45,6 +45,7 @@ import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import javax.swing.GroupLayout
 import kotlin.and
@@ -176,7 +177,11 @@ fun Route.taskRoutes() {
                         it[Tasks.creatorId] = userId
                         it[Tasks.taskName] = trimmedTaskName
                         it[Tasks.description] = trimmedDescription
-                        it[Tasks.dueDate] = request.dueDate?.let { date -> LocalDateTime.parse(date, DateTimeFormatter.ISO_DATE_TIME)}
+                        it[Tasks.dueDate] = request.dueDate?.let { date
+                            ->
+                            OffsetDateTime.parse(date, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                .toLocalDateTime()
+                            }
                         it[Tasks.points] = points
                         it[Tasks.quantity] = request.quantity
                         it[Tasks.requireProof] = request.requireProof
@@ -697,7 +702,8 @@ private fun validateDueDate(dueDate: String?): String? {
     if (dueDate == null) return null
 
     return try {
-        val parsedDate = LocalDateTime.parse(dueDate, DateTimeFormatter.ISO_DATE_TIME)
+        val parsedDate = OffsetDateTime.parse(dueDate, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            .toLocalDateTime()
         val now = LocalDateTime.now()
         val bufferMinutes = 1L // 1-minute buffer
 
