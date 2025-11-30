@@ -481,7 +481,7 @@ fun Route.taskRoutes() {
                 val claims = dbQuery {
                     (Claims innerJoin Users)
                         .select(Claims.id, Claims.claimantId, Users.username)
-                        .where { (Claims.taskId eq taskId) and (Claims.releasedAt eq null) and (Claims.claimantId eq Users.id) }
+                        .where { (Claims.taskId eq taskId) and (Claims.claimantId eq Users.id) }
                         .toList()
                 }
 
