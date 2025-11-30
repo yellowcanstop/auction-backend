@@ -152,6 +152,16 @@ data class ViewTaskResponse(
     val tasks: List<TaskData>
 )
 
+data class TaskResultRow(
+    val taskData: TaskData,
+    val claimId: Int
+)
+@Serializable
+data class ViewClaimTaskResponse(
+    val tasks: List<TaskData>,
+    val taskIdToClaimId: Map<Int, Int>
+)
+
 enum class Difficulty {
     EASY,
     AVERAGE,

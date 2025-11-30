@@ -18,8 +18,10 @@ import com.example.models.Status
 import com.example.models.SubmissionData
 import com.example.models.Submissions
 import com.example.models.TaskData
+import com.example.models.TaskResultRow
 import com.example.models.Tasks
 import com.example.models.Users
+import com.example.models.ViewClaimTaskResponse
 import com.example.models.ViewClaimsResponse
 import com.example.models.ViewTaskResponse
 import com.example.plugins.userId
@@ -68,7 +70,7 @@ fun Route.taskRoutes() {
 
                 val tasks = dbQuery {
                     Tasks.select(Tasks.id, Tasks.taskName, Tasks.description, Tasks.status, Tasks.dueDate, Tasks.points, Tasks.quantity, Tasks.requireProof)
-                        .where { (Tasks.groupId eq groupId) and (Tasks.status eq Status.ACTIVE) and (Tasks.quantity neq 0)}
+                        .where { (Tasks.groupId eq groupId) and (Tasks.status eq Status.ACTIVE)}
                         .map {
                             TaskData(
                                 taskId = it[Tasks.id].value,
@@ -656,24 +658,34 @@ fun Route.taskRoutes() {
                     return@get
                 }
 
-                val tasks = dbQuery {
+                val rawResults: List<TaskResultRow> = dbQuery {
                     (Claims innerJoin Tasks)
-                        .select(Tasks.id, Tasks.taskName, Tasks.description, Tasks.dueDate, Tasks.points, Tasks.quantity, Tasks.requireProof)
+                        .select(Tasks.id, Tasks.taskName, Tasks.description, Tasks.dueDate, Tasks.points, Tasks.quantity, Tasks.requireProof, Claims.id)
                         .where { (Claims.taskId eq Tasks.id) and (Claims.releasedAt eq null) and (Claims.claimantId eq userId) }
-                        .map {
-                            TaskData(
-                                taskId = it[Tasks.id].value,
-                                taskName = it[Tasks.taskName],
-                                description = it[Tasks.description],
-                                dueDate = it[Tasks.dueDate]?.toString(),
-                                points = it[Tasks.points],
-                                quantity = it[Tasks.quantity],
-                                requireProof = it[Tasks.requireProof]
+                        .map { resultRow ->
+                            TaskResultRow(
+                                taskData = TaskData(
+                                    taskId = resultRow[Tasks.id].value,
+                                    taskName = resultRow[Tasks.taskName],
+                                    description = resultRow[Tasks.description],
+                                    dueDate = resultRow[Tasks.dueDate]?.toString(),
+                                    points = resultRow[Tasks.points],
+                                    quantity = resultRow[Tasks.quantity],
+                                    requireProof = resultRow[Tasks.requireProof]
+                                ),
+                                claimId = resultRow[Claims.id].value
                             )
                         }
                 }
 
-                call.respond(HttpStatusCode.OK, ViewTaskResponse(tasks))
+                val tasks: List<TaskData> = rawResults.map { it.taskData }
+
+                val taskIdToClaimId: Map<Int, Int> = rawResults.associate { rawRow ->
+                    rawRow.taskData.taskId to rawRow.claimId
+                }
+
+                call.respond(HttpStatusCode.OK, ViewClaimTaskResponse(tasks, taskIdToClaimId))
+
             }
         }
     }
