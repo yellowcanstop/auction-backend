@@ -11,6 +11,8 @@ import com.example.models.Decision
 import com.example.models.Difficulty
 import com.example.models.GradeSubmissionRequest
 import com.example.models.Groups
+import com.example.models.MemberClaimData
+import com.example.models.MemberSubmissionData
 import com.example.models.Memberships
 import com.example.models.ReviewData
 import com.example.models.Reviews
@@ -23,6 +25,7 @@ import com.example.models.Tasks
 import com.example.models.Users
 import com.example.models.ViewClaimTaskResponse
 import com.example.models.ViewClaimsResponse
+import com.example.models.ViewMemberClaimsResponse
 import com.example.models.ViewTaskResponse
 import com.example.plugins.userId
 import com.example.services.NotificationService.notifySubmissionAccepted
@@ -687,6 +690,84 @@ fun Route.taskRoutes() {
                 call.respond(HttpStatusCode.OK, ViewClaimTaskResponse(tasks, taskIdToClaimId))
 
             }
+
+            get("/myclaims/{groupId}") {
+                val groupId = call.parameters["groupId"]?.toIntOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
+
+                val userId = call.userId()
+
+                if (notActiveMember(userId, groupId)) {
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You are not permitted to view claims in this group"))
+                    return@get
+                }
+
+                val claims = dbQuery {
+                    Claims.select(Claims.id, Claims.taskId, Claims.claimantId, Claims.claimedAt, Claims.releasedAt)
+                        .where { (Claims.claimantId eq userId) }
+                        .toList()
+                }
+
+                val claimIds = claims.map { it[Claims.id].value }
+
+                if (claimIds.isEmpty()) {
+                    call.respond(HttpStatusCode.OK, ViewClaimsResponse(emptyList()))
+                    return@get
+                }
+
+                // Although submission is one-to-one with claim,
+                // fetch all submissions for all claims in one query
+                // instead of querying per claimId
+                val submissions = dbQuery {
+                    Submissions.select(Submissions.id, Submissions.claimId, Submissions.authorId, Submissions.coAuthorId, Submissions.submittedAt, Submissions.textContent, Submissions.imageContent)
+                        .where { (Submissions.claimId inList claimIds) and (Submissions.status eq Status.ACTIVE) }
+                        .toList()
+                }.groupBy { it[Submissions.claimId].value }
+
+                // fetch co-author names
+                val coAuthorIds = submissions.values.flatten().mapNotNull { it[Submissions.coAuthorId]?.value }.toSet()
+                val coAuthorNames = if (coAuthorIds.isNotEmpty()) {
+                    dbQuery {
+                        Users.select(Users.id, Users.username)
+                            .where { Users.id inList coAuthorIds }
+                            .toList()
+                    }.associate { it[Users.id].value to it[Users.username] }
+                } else emptyMap()
+
+                // review is one-to-one with submission which is one-to-one with claim
+                val reviews = dbQuery {
+                    Reviews.select(Reviews.id, Reviews.claimId, Reviews.submissionId, Reviews.reviewedAt, Reviews.decision)
+                        .where { Reviews.claimId inList claimIds }
+                        .toList()
+                }.groupBy { it[Reviews.claimId].value }
+
+                // build list of MemberClaimData
+                val claimList = claims.map { claimRow ->
+                    MemberClaimData(
+                        claimRow[Claims.id].value,
+                        submissions[claimRow[Claims.id].value]?.firstOrNull()?.let { subRow ->
+                            MemberSubmissionData(
+                                submissionId = subRow[Submissions.id].value,
+                                coAuthorId = subRow[Submissions.coAuthorId]?.value,
+                                coAuthorName = coAuthorNames[subRow[Submissions.coAuthorId]?.value],
+                                submittedAt = subRow[Submissions.submittedAt].toString(),
+                                textContent = subRow[Submissions.textContent],
+                                imageContent = subRow[Submissions.imageContent]
+                            )
+                        },
+                        reviews[claimRow[Claims.id].value]?.firstOrNull()?.let { revRow ->
+                            ReviewData(
+                                reviewId = revRow[Reviews.id].value,
+                                reviewedAt = revRow[Reviews.reviewedAt].toString(),
+                                decision = revRow[Reviews.decision]
+                            )
+                        }
+                    )
+                }
+
+                call.respond(HttpStatusCode.OK, ViewMemberClaimsResponse(claimList))
+            }
+
         }
     }
 }

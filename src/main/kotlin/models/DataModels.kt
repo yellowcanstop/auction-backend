@@ -207,8 +207,21 @@ data class ClaimData(
 )
 
 @Serializable
+data class MemberClaimData(
+    val claimId: Int,
+    // if submission and review are empty, "In Progress"
+    val submission: MemberSubmissionData?,
+    val review: ReviewData?
+)
+
+@Serializable
 data class ViewClaimsResponse(
     val claims: List<ClaimData>
+)
+
+@Serializable
+data class ViewMemberClaimsResponse(
+    val claims: List<MemberClaimData>
 )
 
 
@@ -217,6 +230,16 @@ data class SubmissionData(
     val submissionId: Int,
     val authorId: Int, // same as ClaimantId
     val authorName: String, // same as ClaimantName
+    val coAuthorId: Int? = null,
+    val coAuthorName: String? = null,
+    val submittedAt: String, // ISO 8601 for locale independence
+    val textContent: String? = null,
+    val imageContent: String? = null
+)
+
+@Serializable
+data class MemberSubmissionData(
+    val submissionId: Int,
     val coAuthorId: Int? = null,
     val coAuthorName: String? = null,
     val submittedAt: String, // ISO 8601 for locale independence
