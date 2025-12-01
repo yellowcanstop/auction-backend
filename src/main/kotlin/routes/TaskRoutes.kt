@@ -664,7 +664,7 @@ fun Route.taskRoutes() {
                 val rawResults: List<TaskResultRow> = dbQuery {
                     (Claims innerJoin Tasks)
                         .select(Tasks.id, Tasks.taskName, Tasks.description, Tasks.dueDate, Tasks.points, Tasks.quantity, Tasks.requireProof, Claims.id)
-                        .where { (Claims.taskId eq Tasks.id) and (Claims.releasedAt eq null) and (Claims.claimantId eq userId) and (Tasks.groupId eq groupId) }
+                        .where { (Claims.taskId eq Tasks.id) and (Claims.claimantId eq userId) and (Tasks.groupId eq groupId) }
                         .map { resultRow ->
                             TaskResultRow(
                                 taskData = TaskData(
@@ -711,7 +711,7 @@ fun Route.taskRoutes() {
                 val claimIds = claims.map { it[Claims.id].value }
 
                 if (claimIds.isEmpty()) {
-                    call.respond(HttpStatusCode.OK, ViewClaimsResponse(emptyList()))
+                    call.respond(HttpStatusCode.OK, ViewMemberClaimsResponse(emptyList()))
                     return@get
                 }
 
@@ -745,6 +745,9 @@ fun Route.taskRoutes() {
                 val claimList = claims.map { claimRow ->
                     MemberClaimData(
                         claimRow[Claims.id].value,
+                        claimRow[Claims.taskId].value,
+                        claimRow[Claims.claimedAt].toString(),
+                        claimRow[Claims.releasedAt]?.toString(),
                         submissions[claimRow[Claims.id].value]?.firstOrNull()?.let { subRow ->
                             MemberSubmissionData(
                                 submissionId = subRow[Submissions.id].value,

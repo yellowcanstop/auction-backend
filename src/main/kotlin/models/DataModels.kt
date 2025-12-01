@@ -209,6 +209,9 @@ data class ClaimData(
 @Serializable
 data class MemberClaimData(
     val claimId: Int,
+    val taskId: Int,
+    val claimedAt: String,
+    val releasedAt: String?,
     // if submission and review are empty, "In Progress"
     val submission: MemberSubmissionData?,
     val review: ReviewData?
