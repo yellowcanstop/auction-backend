@@ -14,8 +14,10 @@ import com.example.models.CreateAuctionResponse
 import com.example.models.Memberships
 import com.example.models.Status
 import com.example.models.Users
+import com.example.models.ViewAuctionWinnersResponse
 import com.example.models.ViewAuctionsResponse
 import com.example.models.ViewBidsResponse
+import com.example.models.WinnerDetail
 import com.example.plugins.userId
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
@@ -349,13 +351,9 @@ fun Route.auctionRoutes() {
                 call.respond(HttpStatusCode.OK, BidResponse(bidId))
             }
 
-            // TODO not yet consumed by android app
-            get("/winner/{groupId}/{auctionId}") {
+            get("/winners/{groupId}") {
                 val groupId = call.parameters["groupId"]?.toIntOrNull()
                     ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid group ID"))
-
-                val auctionId = call.parameters["auctionId"]?.toIntOrNull()
-                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid auction ID"))
 
                 val userId = call.userId()
 
@@ -364,7 +362,20 @@ fun Route.auctionRoutes() {
                     return@get
                 }
 
-                val winner = dbQuery {
+                val auctions = dbQuery {
+                    Auctions.select(Auctions.id, Auctions.rewardName, Auctions.description)
+                        .where { (Auctions.groupId eq groupId) }
+                        .toList()
+                }
+
+                val auctionIds = auctions.map { it[Auctions.id].value }
+
+                if (auctionIds.isEmpty()) {
+                    call.respond(HttpStatusCode.OK, ViewAuctionWinnersResponse(emptyList()))
+                    return@get
+                }
+
+                val auctionWinners = dbQuery {
                     (AuctionWinners innerJoin Users)
                         .select(
                             AuctionWinners.auctionId,
@@ -373,21 +384,30 @@ fun Route.auctionRoutes() {
                             AuctionWinners.finalizedAt,
                             Users.username
                         )
-                        .where { AuctionWinners.auctionId eq auctionId }
-                        .singleOrNull()
+                        .where { (AuctionWinners.winnerId eq Users.id) and (AuctionWinners.auctionId inList auctionIds)}
+                        .toList()
+                }.groupBy { it[AuctionWinners.auctionId].value }
+
+                val winners = auctions.map { auctionRow ->
+                    AuctionWinnerData(
+                        auctionId = auctionRow[Auctions.id].value,
+                        rewardName = auctionRow[Auctions.rewardName],
+                        description = auctionRow[Auctions.description],
+                        winner = auctionWinners[auctionRow[Auctions.id].value]?.firstOrNull()?.let { detRow ->
+                            WinnerDetail(
+                                winnerId = detRow[AuctionWinners.winnerId].value,
+                                winnerName = detRow[Users.username],
+                                winningBid = detRow[AuctionWinners.winningBid],
+                                finalizedAt = detRow[AuctionWinners.finalizedAt].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                            )
+                        }
+                    )
                 }
 
-                if (winner == null) {
-                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "No winner found"))
+                if (winners.isEmpty()) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("message" to "No winners found for this group yet"))
                 } else {
-                    call.respond(HttpStatusCode.OK, AuctionWinnerData(
-                        auctionId = winner[AuctionWinners.auctionId].value,
-                        winnerId = winner[AuctionWinners.winnerId].value,
-                        winnerName = winner[Users.username],
-                        winningBid = winner[AuctionWinners.winningBid],
-                        finalizedAt = winner[AuctionWinners.finalizedAt].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-                    )
-                    )
+                    call.respond(HttpStatusCode.OK, ViewAuctionWinnersResponse(winners))
                 }
             }
 

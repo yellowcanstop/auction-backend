@@ -323,8 +323,20 @@ data class BidResponse(
 @Serializable
 data class AuctionWinnerData(
     val auctionId: Int,
+    val rewardName: String,
+    val description: String,
+    val winner: WinnerDetail?
+)
+
+@Serializable
+data class WinnerDetail(
     val winnerId: Int,
     val winnerName: String,
     val winningBid: Int,
-    val finalizedAt: String
+    val finalizedAt: String,
+)
+
+@Serializable
+data class ViewAuctionWinnersResponse(
+    val winners: List<AuctionWinnerData>
 )
