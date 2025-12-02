@@ -245,7 +245,44 @@ fun Route.groupRoutes() {
                     return@post
                 }
 
-                // Given unique index on (userId, groupId) for Memberships, need to handle exception if already a member
+                val groupId = group[Groups.id].value
+
+                val existingMembership = dbQuery {
+                    Memberships.select(Memberships.id, Memberships.status)
+                        .where { (Memberships.userId eq userId) and (Memberships.groupId eq groupId) }
+                        .singleOrNull()
+                }
+
+                if (existingMembership != null) {
+                    val currentStatus = existingMembership[Memberships.status]
+                    val membershipId = existingMembership[Memberships.id].value
+
+                    when (currentStatus) {
+                        // already an active member
+                        Status.ACTIVE -> {
+                            call.respond(HttpStatusCode.Conflict, mapOf("error" to "You are already an active member of this group"))
+                            return@post
+                        }
+
+                        // left and rejoining
+                        Status.INACTIVE -> {
+                            dbQuery {
+                                Memberships.update({ Memberships.id eq membershipId }) {
+                                    it[status] = Status.ACTIVE
+                                }
+                            }
+                            call.respond(HttpStatusCode.OK, JoinGroupResponse(
+                                membershipId,
+                                groupId,
+                                group[Groups.groupName],
+                                group[Groups.description],
+                                group[Groups.creatorId].value,
+                            ))
+                            return@post
+                        }
+                    }
+                }
+
                 val membershipId = try {
                     dbQuery {
                         Memberships.insert {
@@ -254,7 +291,7 @@ fun Route.groupRoutes() {
                         }[Memberships.id].value
                     }
                 } catch (e: ExposedSQLException) {
-                    call.respond(HttpStatusCode.Conflict, mapOf("error" to "You are already a member of this group"))
+                    call.respond(HttpStatusCode.Conflict, mapOf("error" to "Could not create membership."))
                     return@post
                 }
 
