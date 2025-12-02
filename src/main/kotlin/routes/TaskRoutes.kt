@@ -51,6 +51,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.swing.GroupLayout
 import kotlin.and
@@ -79,7 +80,7 @@ fun Route.taskRoutes() {
                                 taskId = it[Tasks.id].value,
                                 taskName = it[Tasks.taskName],
                                 description = it[Tasks.description],
-                                dueDate = it[Tasks.dueDate]?.toString(),
+                                dueDate = it[Tasks.dueDate]?.atZone(ZoneId.of("UTC"))?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                                 points = it[Tasks.points],
                                 quantity = it[Tasks.quantity],
                                 requireProof = it[Tasks.requireProof]
@@ -185,6 +186,8 @@ fun Route.taskRoutes() {
                         it[Tasks.dueDate] = request.dueDate?.let { date
                             ->
                             OffsetDateTime.parse(date, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                .toInstant()
+                                .atZone(ZoneId.of("UTC"))
                                 .toLocalDateTime()
                             }
                         it[Tasks.points] = points
@@ -534,7 +537,7 @@ fun Route.taskRoutes() {
                                 authorName = claimRow[Users.username],
                                 coAuthorId = subRow[Submissions.coAuthorId]?.value,
                                 coAuthorName = coAuthorNames[subRow[Submissions.coAuthorId]?.value],
-                                submittedAt = subRow[Submissions.submittedAt].toString(),
+                                submittedAt = subRow[Submissions.submittedAt].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                                 textContent = subRow[Submissions.textContent],
                                 imageContent = subRow[Submissions.imageContent]
                             )
@@ -542,7 +545,7 @@ fun Route.taskRoutes() {
                         reviews[claimRow[Claims.id].value]?.firstOrNull()?.let { revRow ->
                             ReviewData(
                                 reviewId = revRow[Reviews.id].value,
-                                reviewedAt = revRow[Reviews.reviewedAt].toString(),
+                                reviewedAt = revRow[Reviews.reviewedAt].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                                 decision = revRow[Reviews.decision]
                             )
                         }
@@ -671,7 +674,7 @@ fun Route.taskRoutes() {
                                     taskId = resultRow[Tasks.id].value,
                                     taskName = resultRow[Tasks.taskName],
                                     description = resultRow[Tasks.description],
-                                    dueDate = resultRow[Tasks.dueDate]?.toString(),
+                                    dueDate = resultRow[Tasks.dueDate]?.atZone(ZoneId.of("UTC"))?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                                     points = resultRow[Tasks.points],
                                     quantity = resultRow[Tasks.quantity],
                                     requireProof = resultRow[Tasks.requireProof]
@@ -746,14 +749,14 @@ fun Route.taskRoutes() {
                     MemberClaimData(
                         claimRow[Claims.id].value,
                         claimRow[Claims.taskId].value,
-                        claimRow[Claims.claimedAt].toString(),
-                        claimRow[Claims.releasedAt]?.toString(),
+                        claimRow[Claims.claimedAt].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                        claimRow[Claims.releasedAt]?.atZone(ZoneId.of("UTC"))?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                         submissions[claimRow[Claims.id].value]?.firstOrNull()?.let { subRow ->
                             MemberSubmissionData(
                                 submissionId = subRow[Submissions.id].value,
                                 coAuthorId = subRow[Submissions.coAuthorId]?.value,
                                 coAuthorName = coAuthorNames[subRow[Submissions.coAuthorId]?.value],
-                                submittedAt = subRow[Submissions.submittedAt].toString(),
+                                submittedAt = subRow[Submissions.submittedAt].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                                 textContent = subRow[Submissions.textContent],
                                 imageContent = subRow[Submissions.imageContent]
                             )
@@ -761,7 +764,7 @@ fun Route.taskRoutes() {
                         reviews[claimRow[Claims.id].value]?.firstOrNull()?.let { revRow ->
                             ReviewData(
                                 reviewId = revRow[Reviews.id].value,
-                                reviewedAt = revRow[Reviews.reviewedAt].toString(),
+                                reviewedAt = revRow[Reviews.reviewedAt].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                                 decision = revRow[Reviews.decision]
                             )
                         }
@@ -799,8 +802,10 @@ private fun validateDueDate(dueDate: String?): String? {
 
     return try {
         val parsedDate = OffsetDateTime.parse(dueDate, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            .toInstant()
+            .atZone(ZoneId.of("UTC"))
             .toLocalDateTime()
-        val now = LocalDateTime.now()
+        val now = LocalDateTime.now(ZoneId.of("UTC"))
         val bufferMinutes = 1L // 1-minute buffer
 
         when {

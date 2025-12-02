@@ -32,6 +32,7 @@ import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.update
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.and
 import kotlin.compareTo
@@ -87,11 +88,13 @@ fun Route.auctionRoutes() {
                 }
 
                 val startTime = if (request.startNow) {
-                    LocalDateTime.now()
+                    LocalDateTime.now(ZoneId.of("UTC"))
                 } else {
                     try {
                         request.startTime?.let {
                             OffsetDateTime.parse(it, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                .toInstant()
+                                .atZone(ZoneId.of("UTC"))
                                 .toLocalDateTime()}
                             ?: return@post call.respond(
                                 HttpStatusCode.BadRequest,
@@ -100,18 +103,20 @@ fun Route.auctionRoutes() {
                     } catch (e: Exception) {
                         return@post call.respond(
                             HttpStatusCode.BadRequest,
-                            mapOf("error" to "Invalid start time format. Use ISO-8601 format (yyyy-MM-dd'T'HH:mm:ss)")
+                            mapOf("error" to "Invalid start time format. Use ISO-8601 format (yyyy-MM-dd'T'HH:mm:ssXXX)")
                         )
                     }
                 }
 
                 val endTime = try {
                     OffsetDateTime.parse(request.endTime, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                        .toInstant()
+                        .atZone(ZoneId.of("UTC"))
                         .toLocalDateTime()
                 } catch (e: Exception) {
                     return@post call.respond(
                         HttpStatusCode.BadRequest,
-                        mapOf("error" to "Invalid end time format. Use ISO-8601 format (yyyy-MM-dd'T'HH:mm:ss)")
+                        mapOf("error" to "Invalid start time format. Use ISO-8601 format (yyyy-MM-dd'T'HH:mm:ssXXX)")
                     )
                 }
 
@@ -174,8 +179,8 @@ fun Route.auctionRoutes() {
                                 rewardName = it[Auctions.rewardName],
                                 description = it[Auctions.description],
                                 rewardImage = it[Auctions.rewardImage],
-                                startTime = it[Auctions.startTime].format(DateTimeFormatter.ISO_DATE_TIME),
-                                endTime = it[Auctions.endTime].format(DateTimeFormatter.ISO_DATE_TIME),
+                                startTime = it[Auctions.startTime].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                                endTime = it[Auctions.endTime].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                                 minimumBid = it[Auctions.minimumBid],
                                 bidIncrement = it[Auctions.bidIncrement]
                             )
@@ -218,7 +223,7 @@ fun Route.auctionRoutes() {
                                 bidderId = it[Bids.bidderId].value,
                                 bidderName = it[Users.username],
                                 bidAmount = it[Bids.bidAmount],
-                                bidAt = it[Bids.bidAt].format(DateTimeFormatter.ISO_DATE_TIME)
+                                bidAt = it[Bids.bidAt].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                             )
                         }
                 }
@@ -380,7 +385,7 @@ fun Route.auctionRoutes() {
                         winnerId = winner[AuctionWinners.winnerId].value,
                         winnerName = winner[Users.username],
                         winningBid = winner[AuctionWinners.winningBid],
-                        finalizedAt = winner[AuctionWinners.finalizedAt].format(DateTimeFormatter.ISO_DATE_TIME)
+                        finalizedAt = winner[AuctionWinners.finalizedAt].atZone(ZoneId.of("UTC")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                     )
                     )
                 }

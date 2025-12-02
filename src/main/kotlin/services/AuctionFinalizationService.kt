@@ -7,6 +7,7 @@ import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.minus
 import java.time.LocalDateTime
+import java.time.ZoneId
 
 // background job to get ended auctions every 60 seconds
 // there could be better ways but that is for future me
@@ -31,7 +32,7 @@ object AuctionFinalizationService {
     }
 
     private suspend fun finalizeEndedAuctions() {
-        val now = LocalDateTime.now()
+        val now = LocalDateTime.now(ZoneId.of("UTC"))
 
         val endedAuctions = dbQuery {
             Auctions.select(Auctions.id, Auctions.groupId, Auctions.status, Auctions.endTime)

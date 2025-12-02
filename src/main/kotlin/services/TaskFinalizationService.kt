@@ -7,6 +7,7 @@ import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.plus
 import java.time.LocalDateTime
+import java.time.ZoneId
 
 object TaskFinalizationService {
     private var job: Job? = null
@@ -29,7 +30,7 @@ object TaskFinalizationService {
     }
 
     private suspend fun finalizeOverdueTasks() {
-        val now = LocalDateTime.now()
+        val now = LocalDateTime.now(ZoneId.of("UTC"))
 
         val overdueTasks = dbQuery {
             Tasks.select(Tasks.id, Tasks.groupId, Tasks.status, Tasks.dueDate)
