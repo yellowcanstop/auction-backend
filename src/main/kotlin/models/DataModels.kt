@@ -127,7 +127,11 @@ data class GroupData(
     val groupName: String,
     val description: String,
     val inviteCode: String,
-    val creatorId: Int
+    val creatorId: Int,
+    val autoApprove: Boolean,
+    val taskPointsMin: Int?,
+    val taskPointsAverage: Int?,
+    val taskPointsMax: Int?
 )
 
 @Serializable

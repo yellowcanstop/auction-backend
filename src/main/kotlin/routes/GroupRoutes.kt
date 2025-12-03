@@ -309,7 +309,7 @@ fun Route.groupRoutes() {
 
                 val groups = dbQuery {
                     (Memberships innerJoin Groups)
-                        .select(Memberships.groupId, Groups.groupName, Groups.description, Groups.inviteCode, Groups.creatorId)
+                        .select(Memberships.groupId, Groups.groupName, Groups.description, Groups.inviteCode, Groups.creatorId, Groups.autoApprove, Groups.taskPointsMax, Groups.taskPointsMin, Groups.taskPointsAverage)
                         .where { (Memberships.userId eq userId) and (Memberships.status eq Status.ACTIVE) and (Groups.status eq Status.ACTIVE) }
                         .map {
                             GroupData(
@@ -317,7 +317,11 @@ fun Route.groupRoutes() {
                                 groupName = it[Groups.groupName],
                                 description = it[Groups.description],
                                 inviteCode = it[Groups.inviteCode],
-                                creatorId = it[Groups.creatorId].value
+                                creatorId = it[Groups.creatorId].value,
+                                autoApprove = it[Groups.autoApprove],
+                                taskPointsMin = it[Groups.taskPointsMin],
+                                taskPointsAverage = it[Groups.taskPointsAverage],
+                                taskPointsMax = it[Groups.taskPointsMax]
                             )
                         }
                 }
@@ -329,7 +333,7 @@ fun Route.groupRoutes() {
                 val userId = call.userId()
 
                 val groups = dbQuery {
-                    Groups.select(Groups.id, Groups.groupName, Groups.description, Groups.inviteCode, Groups.creatorId)
+                    Groups.select(Groups.id, Groups.groupName, Groups.description, Groups.inviteCode, Groups.creatorId, Groups.autoApprove, Groups.taskPointsAverage, Groups.taskPointsMax, Groups.taskPointsMin)
                         .where { (Groups.creatorId eq userId) and (Groups.status eq Status.ACTIVE) }
                         .map {
                             GroupData(
@@ -337,7 +341,11 @@ fun Route.groupRoutes() {
                                 groupName = it[Groups.groupName],
                                 description = it[Groups.description],
                                 inviteCode = it[Groups.inviteCode],
-                                creatorId = it[Groups.creatorId].value
+                                creatorId = it[Groups.creatorId].value,
+                                autoApprove = it[Groups.autoApprove],
+                                taskPointsMin = it[Groups.taskPointsMin],
+                                taskPointsAverage = it[Groups.taskPointsAverage],
+                                taskPointsMax = it[Groups.taskPointsMax]
                             )
                         }
                 }
